@@ -32,22 +32,20 @@
  * Sorted set API
  *----------------------------------------------------------------------------*/
 
-/* ZSETs are ordered sets using two data structures to hold the same elements
- * in order to get O(log(N)) INSERT and REMOVE operations into a sorted
- * data structure.
+/* ZSET是使用两个数据结构来保存相同元素的有序集合，
+ * 以便将O(log(N))INSERT和REMOVE操作放入一个排序的数据结构中。
  *
- * The elements are added to a hash table mapping Redis objects to scores.
- * At the same time the elements are added to a skip list mapping scores
- * to Redis objects (so objects are sorted by scores in this "view"). */
+ * 这些元素被添加到一个将Redis对象映射到分数的哈希表中。
+ * 同时，元素被添加到一个跳过列表，将分数映射到Redis对象（因此对象在这个“视图”中按分数排序）。
+ * */
 
-/* This skiplist implementation is almost a C translation of the original
- * algorithm described by William Pugh in "Skip Lists: A Probabilistic
- * Alternative to Balanced Trees", modified in three ways:
- * a) this implementation allows for repeated scores.
- * b) the comparison is not just by key (our 'score') but by satellite data.
- * c) there is a back pointer, so it's a doubly linked list with the back
- * pointers being only at "level 1". This allows to traverse the list
- * from tail to head, useful for ZREVRANGE. */
+/* 这个skiplist实现几乎是William Pugh在“Skip Lists:
+ * A Probabilistic Alternative to Balanced Trees”中描述的原始算法的C语言翻译，
+ * 以三种方式修改：
+ * a) 此实现允许重复评分。
+ * b) 比较不仅仅是通过关键（我们的“分数”），而是通过卫星数据。
+ * c) 有一个后向指针，所以它是一个双向链表，后向指针仅在“级别 1”。这允许从尾到头遍历列表，这对 ZREVRANGE 很有用。
+ * */
 
 #include "redis.h"
 #include <math.h>
@@ -55,6 +53,7 @@
 static int zslLexValueGteMin(robj *value, zlexrangespec *spec);
 static int zslLexValueLteMax(robj *value, zlexrangespec *spec);
 
+// 创建跳表节点，默认32层
 zskiplistNode *zslCreateNode(int level, double score, robj *obj) {
     zskiplistNode *zn = zmalloc(sizeof(*zn)+level*sizeof(struct zskiplistLevel));
     zn->score = score;
@@ -62,6 +61,7 @@ zskiplistNode *zslCreateNode(int level, double score, robj *obj) {
     return zn;
 }
 
+// 创建跳表
 zskiplist *zslCreate(void) {
     int j;
     zskiplist *zsl;
@@ -70,7 +70,7 @@ zskiplist *zslCreate(void) {
     zsl->level = 1;
     zsl->length = 0;
     zsl->header = zslCreateNode(ZSKIPLIST_MAXLEVEL,0,NULL);
-    for (j = 0; j < ZSKIPLIST_MAXLEVEL; j++) {
+    for (j = 0; j < ZSKIPLIST_MAXLEVEL; j++) {      // 初始化层
         zsl->header->level[j].forward = NULL;
         zsl->header->level[j].span = 0;
     }
@@ -87,35 +87,44 @@ void zslFreeNode(zskiplistNode *node) {
 void zslFree(zskiplist *zsl) {
     zskiplistNode *node = zsl->header->level[0].forward, *next;
 
-    zfree(zsl->header);
+    zfree(zsl->header);     // 释放第一个节点
     while(node) {
         next = node->level[0].forward;
-        zslFreeNode(node);
+        zslFreeNode(node);      // 释放其余的节点
         node = next;
     }
-    zfree(zsl);
+    zfree(zsl);     // 释放头节点
 }
 
-/* Returns a random level for the new skiplist node we are going to create.
- * The return value of this function is between 1 and ZSKIPLIST_MAXLEVEL
- * (both inclusive), with a powerlaw-alike distribution where higher
- * levels are less likely to be returned. */
+/* 为我们将要创建的新跳过列表节点返回一个随机级别。
+ * 此函数的返回值介于1和ZSKIPLIST_MAXLEVEL之间（两者都包括在内），
+ * 具有类似幂律的分布，其中更高的级别不太可能被返回。
+ *
+ * 1. 至少1层，最多32层
+ * 2. 概率为0.25，即0.75为1层，0.75*0.25为2层，0.75*0.25*0.25为3层，....
+ * */
 int zslRandomLevel(void) {
     int level = 1;
     while ((random()&0xFFFF) < (ZSKIPLIST_P * 0xFFFF))
         level += 1;
     return (level<ZSKIPLIST_MAXLEVEL) ? level : ZSKIPLIST_MAXLEVEL;
 }
-
+// 重点：插入节点
 zskiplistNode *zslInsert(zskiplist *zsl, double score, robj *obj) {
+    /* 以层为单位，最接近插入节点的的节点的跨度保存到rank中
+     * 以层为单位，最接近插入节点的的节点的地址保存到update中
+     * */
     zskiplistNode *update[ZSKIPLIST_MAXLEVEL], *x;
     unsigned int rank[ZSKIPLIST_MAXLEVEL];
     int i, level;
 
     redisAssert(!isnan(score));
-    x = zsl->header;
+    x = zsl->header;        // 第一个节点
+    /* 计算从最高层(level-1)到第0层，满足score条件的节点，
+     * 把节点保存在update中，把跨度保存在rank中。
+     * */
     for (i = zsl->level-1; i >= 0; i--) {
-        /* store rank that is crossed to reach the insert position */
+        /* 为到达插入位置而越过的rank */
         rank[i] = i == (zsl->level-1) ? 0 : rank[i+1];
         while (x->level[i].forward &&
             (x->level[i].forward->score < score ||
@@ -126,12 +135,12 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, robj *obj) {
         }
         update[i] = x;
     }
-    /* we assume the key is not already inside, since we allow duplicated
-     * scores, and the re-insertion of score and redis object should never
-     * happen since the caller of zslInsert() should test in the hash table
-     * if the element is already inside or not. */
-    level = zslRandomLevel();
-    if (level > zsl->level) {
+    /* 我们假设键不在里面，因为我们允许重复的分数，
+     * 并且不应该重新插入分数和redis对象，
+     * 因为zslInsert()的调用者应该在哈希表中测试元素是否已经在里面。
+     * */
+    level = zslRandomLevel();       // 随机层数
+    if (level > zsl->level) {       // 如果层数超过最大层，先初始化一些数据
         for (i = zsl->level; i < level; i++) {
             rank[i] = 0;
             update[i] = zsl->header;
@@ -140,22 +149,23 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, robj *obj) {
         zsl->level = level;
     }
     x = zslCreateNode(level,score,obj);
-    for (i = 0; i < level; i++) {
+    for (i = 0; i < level; i++) {       // 把新节点中各层的forward和span设置好
         x->level[i].forward = update[i]->level[i].forward;
         update[i]->level[i].forward = x;
 
-        /* update span covered by update[i] as x is inserted here */
+        /* update[i]覆盖的更新跨度，因为这里插入了x */
         x->level[i].span = update[i]->level[i].span - (rank[0] - rank[i]);
         update[i]->level[i].span = (rank[0] - rank[i]) + 1;
     }
 
-    /* increment span for untouched levels */
+    /* 未触及层的增量跨度 */
     for (i = level; i < zsl->level; i++) {
         update[i]->level[i].span++;
     }
-
+    
+    // update[0] == zsl->header成立，说明新节点插在最左边
     x->backward = (update[0] == zsl->header) ? NULL : update[0];
-    if (x->level[0].forward)
+    if (x->level[0].forward)        // 成立，说明新节点不是插在最右边
         x->level[0].forward->backward = x;
     else
         zsl->tail = x;

@@ -579,21 +579,22 @@ struct sharedObjectsStruct {
     *bulkhdr[REDIS_SHARED_BULKHDR_LEN];  /* "$<value>\r\n" */
 };
 
-/* ZSETs use a specialized version of Skiplists */
+/* ZSET 使用专门版本的 Skiplist */
 typedef struct zskiplistNode {
-    robj *obj;
-    double score;
-    struct zskiplistNode *backward;
-    struct zskiplistLevel {
-        struct zskiplistNode *forward;
-        unsigned int span;
+    robj *obj;      // 用户数据，第一个节点没有
+    double score;       // 分数，节点按score排序，第一个节点没有
+    struct zskiplistNode *backward;     // 后退指针(从tail向head遍历使用)，第一个节点没有
+    struct zskiplistLevel {         // 层数
+        struct zskiplistNode *forward;      // 前进指针(从head向tail遍历使用)
+        unsigned int span;      // 前进指针的跨度，计算rank时使用
     } level[];
 } zskiplistNode;
 
+// 跳表管理器
 typedef struct zskiplist {
-    struct zskiplistNode *header, *tail;
-    unsigned long length;
-    int level;
+    struct zskiplistNode *header, *tail;        // 第一个节点和最后一个节点
+    unsigned long length;       // 链表长度，不含第一个节点
+    int level;      // 节点的最大层数，不含第一个节点
 } zskiplist;
 
 typedef struct zset {
@@ -1206,8 +1207,12 @@ typedef struct {
     int minex, maxex; /* are min or max exclusive? */
 } zlexrangespec;
 
+// 跳表接口
+// 创建跳表
 zskiplist *zslCreate(void);
+// 释放整个跳表
 void zslFree(zskiplist *zsl);
+// 重点：插入节点
 zskiplistNode *zslInsert(zskiplist *zsl, double score, robj *obj);
 unsigned char *zzlInsert(unsigned char *zl, robj *ele, double score);
 int zslDelete(zskiplist *zsl, double score, robj *obj);
