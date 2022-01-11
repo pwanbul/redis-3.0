@@ -715,7 +715,7 @@ werr: /* Write error. */
     return REDIS_ERR;
 }
 
-/* Save the DB on disk. Return REDIS_ERR on error, REDIS_OK on success. */
+/* 将数据库保存在磁盘上。出错时返回 REDIS_ERR，成功时返回 REDIS_OK。 */
 int rdbSave(char *filename) {
     char tmpfile[256];
     FILE *fp;
@@ -736,21 +736,20 @@ int rdbSave(char *filename) {
         goto werr;
     }
 
-    /* Make sure data will not remain on the OS's output buffers */
+    /* 确保数据不会保留在操作系统的输出缓冲区中 */
     if (fflush(fp) == EOF) goto werr;
     if (fsync(fileno(fp)) == -1) goto werr;
     if (fclose(fp) == EOF) goto werr;
 
-    /* Use RENAME to make sure the DB file is changed atomically only
-     * if the generate DB file is ok. */
+    /* 使用RENAME确保仅在生成的DB文件正常时才以原子方式更改DB文件。 */
     if (rename(tmpfile,filename) == -1) {
         redisLog(REDIS_WARNING,"Error moving temp DB file on the final destination: %s", strerror(errno));
         unlink(tmpfile);
         return REDIS_ERR;
     }
     redisLog(REDIS_NOTICE,"DB saved on disk");
-    server.dirty = 0;
-    server.lastsave = time(NULL);
+    server.dirty = 0;			// 脏数据数据清空
+    server.lastsave = time(NULL);		// 记录保存数据的时间
     server.lastbgsave_status = REDIS_OK;
     return REDIS_OK;
 
@@ -761,6 +760,7 @@ werr:
     return REDIS_ERR;
 }
 
+/* 后台dump rdb */
 int rdbSaveBackground(char *filename) {
     pid_t childpid;
     long long start;
@@ -801,9 +801,9 @@ int rdbSaveBackground(char *filename) {
         }
         redisLog(REDIS_NOTICE,"Background saving started by pid %d",childpid);
         server.rdb_save_time_start = time(NULL);
-        server.rdb_child_pid = childpid;
+        server.rdb_child_pid = childpid;			// 记录子进程pid
         server.rdb_child_type = REDIS_RDB_CHILD_TYPE_DISK;
-        updateDictResizePolicy();
+        updateDictResizePolicy();			// 调整resize负载因子
         return REDIS_OK;
     }
     return REDIS_OK; /* unreached */
@@ -1238,8 +1238,7 @@ eoferr: /* unexpected end of file is handled here with a fatal exit */
     return REDIS_ERR; /* Just to avoid warning */
 }
 
-/* A background saving child (BGSAVE) terminated its work. Handle this.
- * This function covers the case of actual BGSAVEs. */
+/* 后台保存子程序 (BGSAVE) 终止了它的工作。处理这个（事情。此功能涵盖实际 BGSAVE 的情况）. */
 void backgroundSaveDoneHandlerDisk(int exitcode, int bysignal) {
     if (!bysignal && exitcode == 0) {
         redisLog(REDIS_NOTICE,
@@ -1368,7 +1367,7 @@ void backgroundSaveDoneHandlerSocket(int exitcode, int bysignal) {
     updateSlavesWaitingBgsave((!bysignal && exitcode == 0) ? REDIS_OK : REDIS_ERR, REDIS_RDB_CHILD_TYPE_SOCKET);
 }
 
-/* When a background RDB saving/transfer terminates, call the right handler. */
+/* 当后台 RDB 保存传输终止时，调用正确的处理程序。 */
 void backgroundSaveDoneHandler(int exitcode, int bysignal) {
     switch(server.rdb_child_type) {
     case REDIS_RDB_CHILD_TYPE_DISK:
@@ -1521,6 +1520,7 @@ int rdbSaveToSlavesSockets(void) {
     return REDIS_OK; /* unreached */
 }
 
+/* save */
 void saveCommand(redisClient *c) {
     if (server.rdb_child_pid != -1) {
         addReplyError(c,"Background save already in progress");
@@ -1533,10 +1533,11 @@ void saveCommand(redisClient *c) {
     }
 }
 
+/* bgsave */
 void bgsaveCommand(redisClient *c) {
-    if (server.rdb_child_pid != -1) {
+    if (server.rdb_child_pid != -1) {			// 不可重入
         addReplyError(c,"Background save already in progress");
-    } else if (server.aof_child_pid != -1) {
+    } else if (server.aof_child_pid != -1) {		// 正在执行aof
         addReplyError(c,"Can't BGSAVE while AOF log rewriting is in progress");
     } else if (rdbSaveBackground(server.rdb_filename) == REDIS_OK) {
         addReplyStatus(c,"Background saving started");

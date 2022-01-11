@@ -32,13 +32,32 @@
 #define __INTSET_H
 #include <stdint.h>
 
+/* 整数集合
+ * 当set中的整数时，使用该数据结构
+ * 127.0.0.1:6379> sadd hello 32 18 30 12
+ * (integer) 4
+ * 127.0.0.1:6379> smembers hello       # 数据是有序的
+ * 1) "12"
+ * 2) "18"
+ * 3) "30"
+ * 4) "32"
+ * 127.0.0.1:6379> object encoding hello
+ * "intset"
+ *
+ * 注意：
+ * 1. 不能重复插入，所以重复数据，不需要升级
+ * 2. 如果需要升级，那么一定插在两边，而不是中间
+ * 3. 如果数据<0，那么一定插在左边
+ * */
 typedef struct intset {
-    uint32_t encoding;
-    uint32_t length;
-    int8_t contents[];
+    uint32_t encoding;          // 编码方式，16位/32位/64位
+    uint32_t length;            // 数据的数量
+    int8_t contents[];          // 用于保存数据
 } intset;
 
+// 创建intset
 intset *intsetNew(void);
+// 插入元素，success表示是否成功插入
 intset *intsetAdd(intset *is, int64_t value, uint8_t *success);
 intset *intsetRemove(intset *is, int64_t value, int *success);
 uint8_t intsetFind(intset *is, int64_t value);

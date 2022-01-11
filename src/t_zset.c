@@ -173,7 +173,7 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, robj *obj) {
     return x;
 }
 
-/* Internal function used by zslDelete, zslDeleteByScore and zslDeleteByRank */
+/* zslDelete、zslDeleteByScore 和 zslDeleteByRank 使用的内部函数 */
 void zslDeleteNode(zskiplist *zsl, zskiplistNode *x, zskiplistNode **update) {
     int i;
     for (i = 0; i < zsl->level; i++) {
@@ -194,7 +194,7 @@ void zslDeleteNode(zskiplist *zsl, zskiplistNode *x, zskiplistNode **update) {
     zsl->length--;
 }
 
-/* Delete an element with matching score/object from the skiplist. */
+/* 从跳过列表中删除具有匹配 scoreobject 的元素。 */
 int zslDelete(zskiplist *zsl, double score, robj *obj) {
     zskiplistNode *update[ZSKIPLIST_MAXLEVEL], *x;
     int i;
@@ -208,8 +208,7 @@ int zslDelete(zskiplist *zsl, double score, robj *obj) {
             x = x->level[i].forward;
         update[i] = x;
     }
-    /* We may have multiple elements with the same score, what we need
-     * is to find the element with both the right score and object. */
+    /* 我们可能有多个分数相同的元素，我们需要的是找到分数和对象都正确的元素。 */
     x = x->level[0].forward;
     if (x && score == x->score && equalStringObjects(x->obj,obj)) {
         zslDeleteNode(zsl, x, update);
@@ -218,6 +217,7 @@ int zslDelete(zskiplist *zsl, double score, robj *obj) {
     }
     return 0; /* not found */
 }
+
 
 static int zslValueGteMin(double value, zrangespec *spec) {
     return spec->minex ? (value > spec->min) : (value >= spec->min);

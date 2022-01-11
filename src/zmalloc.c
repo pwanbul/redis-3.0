@@ -88,8 +88,10 @@ void zlibc_free(void *ptr) {
 
 #endif
 
+// 更新used_memory统计量
 #define update_zmalloc_stat_alloc(__n) do { \
-    size_t _n = (__n); \
+    size_t _n = (__n);                      \
+    /*对齐大小*/                             \
     if (_n&(sizeof(long)-1)) _n += sizeof(long)-(_n&(sizeof(long)-1)); \
     if (zmalloc_thread_safe) { \
         update_zmalloc_stat_add(_n); \
@@ -109,9 +111,10 @@ void zlibc_free(void *ptr) {
 } while(0)
 
 static size_t used_memory = 0;
-static int zmalloc_thread_safe = 0;
-pthread_mutex_t used_memory_mutex = PTHREAD_MUTEX_INITIALIZER;
+static int zmalloc_thread_safe = 0;         // MTS标记
+pthread_mutex_t used_memory_mutex = PTHREAD_MUTEX_INITIALIZER;          // 需要MTS时使用的互斥锁
 
+// oom处理
 static void zmalloc_default_oom(size_t size) {
     fprintf(stderr, "zmalloc: Out of memory trying to allocate %zu bytes\n",
         size);
@@ -121,17 +124,33 @@ static void zmalloc_default_oom(size_t size) {
 
 static void (*zmalloc_oom_handler)(size_t) = zmalloc_default_oom;
 
+/* redis抽象出的内存分配器
+ * 某些内存分配器，如tcmalloc,jemalloc等，
+ * 提供了获取所分配的内存空间大小的接口，
+ * 但是glibc上的malloc没有这样的接口，
+ * 因此需要带上cookie来手工模拟出这个效果。
+ *
+ * 分配的内存空间大小是实际分配的大小，
+ * 而非请求分配的大小，通常实际大小>=请求分配的大小
+ * */
 void *zmalloc(size_t size) {
+    /* malloc是封装之后的，底层实现可能是
+     * tc_malloc，je_malloc，glibc中的malloc
+     *
+     * PREFIX_SIZE是个macro，取值可能是0
+     * */
     void *ptr = malloc(size+PREFIX_SIZE);
 
     if (!ptr) zmalloc_oom_handler(size);
 #ifdef HAVE_MALLOC_SIZE
+    // zmalloc_size返回实际分配的大小
     update_zmalloc_stat_alloc(zmalloc_size(ptr));
     return ptr;
 #else
-    *((size_t*)ptr) = size;
-    update_zmalloc_stat_alloc(size+PREFIX_SIZE);
-    return (char*)ptr+PREFIX_SIZE;
+    // 手工模拟
+    *((size_t*)ptr) = size;     // 把size值保存在cookie中
+    update_zmalloc_stat_alloc(size+PREFIX_SIZE);        // 更新统计量
+    return (char*)ptr+PREFIX_SIZE;      // 返回可用空间地址
 #endif
 }
 

@@ -1308,7 +1308,7 @@ int rewriteAppendOnlyFileBackground(void) {
         server.aof_rewrite_scheduled = 0;
         server.aof_rewrite_time_start = time(NULL);
         server.aof_child_pid = childpid;
-        updateDictResizePolicy();
+        updateDictResizePolicy();				// 调整resize负载因子
         /* We set appendseldb to -1 in order to force the next call to the
          * feedAppendOnlyFile() to issue a SELECT command, so the differences
          * accumulated by the parent into server.aof_rewrite_buf will start
@@ -1320,11 +1320,12 @@ int rewriteAppendOnlyFileBackground(void) {
     return REDIS_OK; /* unreached */
 }
 
+/* bgrewriteaof */
 void bgrewriteaofCommand(redisClient *c) {
-    if (server.aof_child_pid != -1) {
+    if (server.aof_child_pid != -1) {			// 不可重入
         addReplyError(c,"Background append only file rewriting already in progress");
     } else if (server.rdb_child_pid != -1) {
-        server.aof_rewrite_scheduled = 1;
+        server.aof_rewrite_scheduled = 1;			// 等bgsave结束后，在执行bgrewriteaof
         addReplyStatus(c,"Background append only file rewriting scheduled");
     } else if (rewriteAppendOnlyFileBackground() == REDIS_OK) {
         addReplyStatus(c,"Background append only file rewriting started");

@@ -38,7 +38,9 @@
 
 typedef char *sds;
 
-// 简单动态字符串，二进制安全的
+/* 简单动态字符串，二进制安全的
+ * 实现string，AOF缓冲区，客户端状态中的输入缓存区
+ * */
 struct sdshdr {
     unsigned int len;		// buff中字符串的长度，不含'\0'
     unsigned int free;		// buff中未使用的空间

@@ -35,13 +35,15 @@
 #include "zmalloc.h"
 #include "endianconv.h"
 
-/* Note that these encodings are ordered, so:
- * INTSET_ENC_INT16 < INTSET_ENC_INT32 < INTSET_ENC_INT64. */
+/* 请注意，这些编码是有序的，因此：
+ * INTSET_ENC_INT16 < INTSET_ENC_INT32 < INTSET_ENC_INT64.
+ * 保存的数据已最大尺寸的为准，如果插入了尺寸更大的数据，需要升级
+ * */
 #define INTSET_ENC_INT16 (sizeof(int16_t))
 #define INTSET_ENC_INT32 (sizeof(int32_t))
 #define INTSET_ENC_INT64 (sizeof(int64_t))
 
-/* Return the required encoding for the provided value. */
+/* 返回提供的值所需的编码。 */
 static uint8_t _intsetValueEncoding(int64_t v) {
     if (v < INT32_MIN || v > INT32_MAX)
         return INTSET_ENC_INT64;
@@ -93,7 +95,7 @@ static void _intsetSet(intset *is, int pos, int64_t value) {
     }
 }
 
-/* Create an empty intset. */
+/* 创建一个空的 intset。 */
 intset *intsetNew(void) {
     intset *is = zmalloc(sizeof(intset));
     is->encoding = intrev32ifbe(INTSET_ENC_INT16);
@@ -101,7 +103,7 @@ intset *intsetNew(void) {
     return is;
 }
 
-/* Resize the intset */
+/* 调整intset */
 static intset *intsetResize(intset *is, uint32_t len) {
     uint32_t size = len*intrev32ifbe(is->encoding);
     is = zrealloc(is,sizeof(intset)+size);
@@ -153,24 +155,23 @@ static uint8_t intsetSearch(intset *is, int64_t value, uint32_t *pos) {
     }
 }
 
-/* Upgrades the intset to a larger encoding and inserts the given integer. */
+/* 将intset升级为更大的编码并插入给定的整数。 */
 static intset *intsetUpgradeAndAdd(intset *is, int64_t value) {
     uint8_t curenc = intrev32ifbe(is->encoding);
     uint8_t newenc = _intsetValueEncoding(value);
     int length = intrev32ifbe(is->length);
     int prepend = value < 0 ? 1 : 0;
 
-    /* First set new encoding and resize */
+    /* 首先设置新的编码并调整大小 */
     is->encoding = intrev32ifbe(newenc);
-    is = intsetResize(is,intrev32ifbe(is->length)+1);
+    is = intsetResize(is,intrev32ifbe(is->length)+1);       // +1是为了保存新value
 
-    /* Upgrade back-to-front so we don't overwrite values.
-     * Note that the "prepend" variable is used to make sure we have an empty
-     * space at either the beginning or the end of the intset. */
+    /* 从后到前升级，这样我们就不会覆盖值。
+     * 请注意，“prepend”变量用于确保我们在intset的开头或结尾处有一个空白空间。 */
     while(length--)
         _intsetSet(is,length+prepend,_intsetGetEncoded(is,length,curenc));
 
-    /* Set the value at the beginning or the end. */
+    /* 在开头或结尾设置值。 */
     if (prepend)
         _intsetSet(is,0,value);
     else
@@ -200,23 +201,27 @@ static void intsetMoveTail(intset *is, uint32_t from, uint32_t to) {
     memmove(dst,src,bytes);
 }
 
-/* Insert an integer in the intset */
+/* 在intset中插入一个整数 */
 intset *intsetAdd(intset *is, int64_t value, uint8_t *success) {
-    uint8_t valenc = _intsetValueEncoding(value);
+    uint8_t valenc = _intsetValueEncoding(value);       // 获取value的编码
     uint32_t pos;
     if (success) *success = 1;
 
-    /* Upgrade encoding if necessary. If we need to upgrade, we know that
-     * this value should be either appended (if > 0) or prepended (if < 0),
-     * because it lies outside the range of existing values. */
+    /* 必要时升级编码。如果我们需要升级，
+     * 我们知道这个值应该被追加（如果>0）或被前置（如果<0），
+     * 因为它位于现有值的范围之外。
+     * 注意：如果需要升级，那么value比现有数据中最小的还要小，或者最大的还要大
+     * */
     if (valenc > intrev32ifbe(is->encoding)) {
-        /* This always succeeds, so we don't need to curry *success. */
+        /* 这总是成功的，不会和现有元素重复，所以我们不需要咖喱成功。 */
         return intsetUpgradeAndAdd(is,value);
     } else {
-        /* Abort if the value is already present in the set.
-         * This call will populate "pos" with the right position to insert
-         * the value when it cannot be found. */
+        /* 如果该值已存在于集合中，则中止。
+         * 此调用将使用正确的位置填充“pos”以在找不到值时插入该值。
+         * 查找是否存在重复元素，如果不重复，把正确的位置保存在pos中
+         * */
         if (intsetSearch(is,value,&pos)) {
+            // 有重复，插入失败
             if (success) *success = 0;
             return is;
         }
@@ -230,7 +235,7 @@ intset *intsetAdd(intset *is, int64_t value, uint8_t *success) {
     return is;
 }
 
-/* Delete integer from intset */
+/* 从intset中删除整数 */
 intset *intsetRemove(intset *is, int64_t value, int *success) {
     uint8_t valenc = _intsetValueEncoding(value);
     uint32_t pos;

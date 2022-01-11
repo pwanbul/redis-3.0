@@ -1,15 +1,11 @@
 /* endinconv.c -- Endian conversions utilities.
  *
- * This functions are never called directly, but always using the macros
- * defined into endianconv.h, this way we define everything is a non-operation
- * if the arch is already little endian.
+ * 这个函数永远不会被直接调用，而是总是使用定义在 endianconv.h 中的宏，
+ * 这样我们定义的一切都是非操作的，如果 arch 已经是小端。
  *
- * Redis tries to encode everything as little endian (but a few things that need
- * to be backward compatible are still in big endian) because most of the
- * production environments are little endian, and we have a lot of conversions
- * in a few places because ziplists, intsets, zipmaps, need to be endian-neutral
- * even in memory, since they are serialied on RDB files directly with a single
- * write(2) without other additional steps.
+ * Redis 尝试将所有内容都编码为小端（但一些需要向后兼容的东西仍然是大端）
+ * 因为大多数生产环境都是小端，我们在一些地方进行了大量转换，因为 ziplists、intsets , zipmaps，
+ * 即使在内存中也需要是字节序中性的，因为它们直接在RDB文件上使用单个write(2)进行序列化，无需其他额外步骤。
  *
  * ----------------------------------------------------------------------------
  *
@@ -44,8 +40,9 @@
 
 #include <stdint.h>
 
-/* Toggle the 16 bit unsigned integer pointed by *p from little endian to
- * big endian */
+/* 将p指向的16位无符号整数从小端切换到大端
+ * 0 1 -> 1 0
+ * */
 void memrev16(void *p) {
     unsigned char *x = p, t;
 
@@ -54,8 +51,9 @@ void memrev16(void *p) {
     x[1] = t;
 }
 
-/* Toggle the 32 bit unsigned integer pointed by *p from little endian to
- * big endian */
+/* 将p指向的32位无符号整数从小端切换到大端
+ * 0 1 2 3 -> 3 2 1 0
+ * */
 void memrev32(void *p) {
     unsigned char *x = p, t;
 
@@ -67,8 +65,9 @@ void memrev32(void *p) {
     x[2] = t;
 }
 
-/* Toggle the 64 bit unsigned integer pointed by *p from little endian to
- * big endian */
+/* 将p指向的64位无符号整数从小端切换到大端
+ * 0 1 2 3 4 5 6 7 -> 7 6 5 4 3 2 1 0
+ * */
 void memrev64(void *p) {
     unsigned char *x = p, t;
 

@@ -666,13 +666,11 @@ void tryResizeHashTables(int dbid) {
         dictResize(server.db[dbid].expires);
 }
 
-/* Our hash table implementation performs rehashing incrementally while
- * we write/read from the hash table. Still if the server is idle, the hash
- * table will use two tables for a long time. So we try to use 1 millisecond
- * of CPU time at every call of this function to perform some rehahsing.
+/* 我们的哈希表实现在我们从哈希表中写入读取时增量地执行重新哈希。
+ * 仍然如果服务器空闲，哈希表将长时间使用两个表。
+ * 因此，我们尝试在每次调用此函数时使用 1 毫秒的 CPU 时间来执行一些重新散列。
  *
- * The function returns 1 if some rehashing was performed, otherwise 0
- * is returned. */
+ * 如果执行了一些重新散列，则该函数返回 1，否则返回 0。 */
 int incrementallyRehash(int dbid) {
     /* Keys dictionary */
     if (dictIsRehashing(server.db[dbid].dict)) {
@@ -687,12 +685,9 @@ int incrementallyRehash(int dbid) {
     return 0;
 }
 
-/* This function is called once a background process of some kind terminates,
- * as we want to avoid resizing the hash tables when there is a child in order
- * to play well with copy-on-write (otherwise when a resize happens lots of
- * memory pages are copied). The goal of this function is to update the ability
- * for dict.c to resize the hash tables accordingly to the fact we have o not
- * running childs. */
+/* 一旦某种后台进程终止，就会调用此函数，因为我们希望避免在有孩子时调整哈希表的大小，
+ * 以便更好地进行写时复制（否则当调整大小时，会复制大量内存页面）。
+ * 这个函数的目标是更新 dict.c 的能力，以根据我们没有运行孩子的事实调整哈希表的大小。*/
 void updateDictResizePolicy(void) {
     if (server.rdb_child_pid == -1 && server.aof_child_pid == -1)
         dictEnableResize();
@@ -1145,19 +1140,19 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     /* Handle background operations on Redis databases. */
     databasesCron();
 
-    /* Start a scheduled AOF rewrite if this was requested by the user while
-     * a BGSAVE was in progress. */
+    /* 如果用户在 BGSAVE 正在进行时提出请求，则启动计划的 AOF 重写。 */
     if (server.rdb_child_pid == -1 && server.aof_child_pid == -1 &&
         server.aof_rewrite_scheduled)
     {
         rewriteAppendOnlyFileBackground();
     }
 
-    /* Check if a background saving or AOF rewrite in progress terminated. */
+    /* 检查正在进行的后台保存或 AOF 重写是否终止。 */
     if (server.rdb_child_pid != -1 || server.aof_child_pid != -1) {
         int statloc;
         pid_t pid;
-
+        
+        // 检查子进程是否结束
         if ((pid = wait3(&statloc,WNOHANG,NULL)) != 0) {
             int exitcode = WEXITSTATUS(statloc);
             int bysignal = 0;
@@ -1173,18 +1168,17 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
                     "Warning, detected child with unmatched pid: %ld",
                     (long)pid);
             }
-            updateDictResizePolicy();
+            updateDictResizePolicy();           // 调整resize负载因子
         }
     } else {
-        /* If there is not a background saving/rewrite in progress check if
-         * we have to save/rewrite now */
+        /* 如果没有正在进行的后台保存重写检查我们是否必须现在保存重写 */
          for (j = 0; j < server.saveparamslen; j++) {
             struct saveparam *sp = server.saveparams+j;
 
-            /* Save if we reached the given amount of changes,
-             * the given amount of seconds, and if the latest bgsave was
-             * successful or if, in case of an error, at least
-             * REDIS_BGSAVE_RETRY_DELAY seconds already elapsed. */
+            /* 如果我们达到给定的更改量，则保存，
+             * 给定的秒数，如果最新的 bgsave 成功，
+             * 或者如果出现错误，至少 REDIS_BGSAVE_RETRY_DELAY 秒已经过去。
+             * */
             if (server.dirty >= sp->changes &&
                 server.unixtime-server.lastsave > sp->seconds &&
                 (server.unixtime-server.lastbgsave_try >
@@ -1215,8 +1209,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     }
 
 
-    /* AOF postponed flush: Try at every cron cycle if the slow fsync
-     * completed. */
+    /* AOF 延迟刷新：如果慢速 fsync 完成，则在每个 cron 周期尝试。 */
     if (server.aof_flush_postponed_start) flushAppendOnlyFile(0);
 
     /* AOF write errors: in this case we have a buffer to flush as well and
@@ -1394,6 +1387,7 @@ void createSharedObjects(void) {
     shared.maxstring = createStringObject("maxstring",9);
 }
 
+// 初始化服务器配置
 void initServerConfig(void) {
     int j;
 
@@ -1401,15 +1395,15 @@ void initServerConfig(void) {
     server.configfile = NULL;
     server.hz = REDIS_DEFAULT_HZ;
     server.runid[REDIS_RUN_ID_SIZE] = '\0';
-    server.arch_bits = (sizeof(long) == 8) ? 64 : 32;
-    server.port = REDIS_SERVERPORT;
-    server.tcp_backlog = REDIS_TCP_BACKLOG;
+    server.arch_bits = (sizeof(long) == 8) ? 64 : 32;           // 32位/64位？
+    server.port = REDIS_SERVERPORT;             // tcp监听端口号
+    server.tcp_backlog = REDIS_TCP_BACKLOG;     // backlog大小
     server.bindaddr_count = 0;
     server.unixsocket = NULL;
     server.unixsocketperm = REDIS_DEFAULT_UNIX_SOCKET_PERM;
     server.ipfd_count = 0;
     server.sofd = -1;
-    server.dbnum = REDIS_DEFAULT_DBNUM;
+    server.dbnum = REDIS_DEFAULT_DBNUM;         // 默认数据库数量
     server.verbosity = REDIS_DEFAULT_VERBOSITY;
     server.maxidletime = REDIS_MAXIDLETIME;
     server.tcpkeepalive = REDIS_DEFAULT_TCP_KEEPALIVE;
@@ -1742,6 +1736,7 @@ void resetServerStats(void) {
     server.stat_net_output_bytes = 0;
 }
 
+/* 初始化服务器 */
 void initServer(void) {
     int j;
 
@@ -1769,6 +1764,7 @@ void initServer(void) {
 
     createSharedObjects();
     adjustOpenFilesLimit();
+    // 事件循环
     server.el = aeCreateEventLoop(server.maxclients+REDIS_EVENTLOOP_FDSET_INCR);
     server.db = zmalloc(sizeof(redisDb)*server.dbnum);
 
@@ -1832,8 +1828,10 @@ void initServer(void) {
     server.repl_good_slaves_count = 0;
     updateCachedTime();
 
-    /* Create the serverCron() time event, that's our main way to process
-     * background operations. */
+    /* 创建serverCron()时间事件，这是我们处理后台操作的主要方式。
+     * 正常模式是只有一个定时器，即servercron，
+     * benchmark模式下还会多一个。
+     * */
     if(aeCreateTimeEvent(server.el, 1, serverCron, NULL, NULL) == AE_ERR) {
         redisPanic("Can't create the serverCron time event.");
         exit(1);
@@ -3401,6 +3399,7 @@ void daemonize(void) {
     }
 }
 
+// 版本信息
 void version(void) {
     printf("Redis server v=%s sha=%s:%d malloc=%s bits=%d build=%llx\n",
         REDIS_VERSION,
@@ -3412,6 +3411,7 @@ void version(void) {
     exit(0);
 }
 
+// 用法
 void usage(void) {
     fprintf(stderr,"Usage: ./redis-server [/path/to/redis.conf] [options]\n");
     fprintf(stderr,"       ./redis-server - (read config from stdin)\n");
@@ -3517,8 +3517,7 @@ void setupSignalHandlers(void) {
 
 void memtest(size_t megabytes, int passes);
 
-/* Returns 1 if there is --sentinel among the arguments or if
- * argv[0] is exactly "redis-sentinel". */
+/* 如果参数中有 --sentinel或者argv[0] 恰好是“redis-sentinel”，则返回 1. */
 int checkForSentinelMode(int argc, char **argv) {
     int j;
 
@@ -3546,8 +3545,7 @@ void loadDataFromDisk(void) {
 }
 
 void redisOutOfMemoryHandler(size_t allocation_size) {
-    redisLog(REDIS_WARNING,"Out Of Memory allocating %zu bytes!",
-        allocation_size);
+    redisLog(REDIS_WARNING,"Out Of Memory allocating %zu bytes!", allocation_size);
     redisPanic("Redis aborting for OUT OF MEMORY");
 }
 
@@ -3567,40 +3565,39 @@ void redisSetProcTitle(char *title) {
 #endif
 }
 
+// redis-server entry point
 int main(int argc, char **argv) {
     struct timeval tv;
 
-    /* We need to initialize our libraries, and the server configuration. */
+    /* 我们需要初始化我们的库和服务器配置。 */
 #ifdef INIT_SETPROCTITLE_REPLACEMENT
     spt_init(argc, argv);
 #endif
     setlocale(LC_COLLATE,"");
-    zmalloc_enable_thread_safeness();
-    zmalloc_set_oom_handler(redisOutOfMemoryHandler);
-    srand(time(NULL)^getpid());
+    zmalloc_enable_thread_safeness();           // 使能MTS
+    zmalloc_set_oom_handler(redisOutOfMemoryHandler);           // 设置日志输入函数
+    srand(time(NULL)^getpid());         // 初始化随机数种子
     gettimeofday(&tv,NULL);
-    dictSetHashFunctionSeed(tv.tv_sec^tv.tv_usec^getpid());
-    server.sentinel_mode = checkForSentinelMode(argc,argv);
-    initServerConfig();
+    dictSetHashFunctionSeed(tv.tv_sec^tv.tv_usec^getpid());         // 设置hash函数种子
+    server.sentinel_mode = checkForSentinelMode(argc,argv);         // 是否开启哨兵模式
+    initServerConfig();             // 初始化redisServer中的字段
 
-    /* We need to init sentinel right now as parsing the configuration file
-     * in sentinel mode will have the effect of populating the sentinel
-     * data structures with master nodes to monitor. */
+    /* 我们现在需要初始化哨兵，因为在哨兵模式下解析配置文件会产生用主节点填充哨兵数据结构进行监控的效果。 */
     if (server.sentinel_mode) {
         initSentinelConfig();
         initSentinel();
     }
 
     if (argc >= 2) {
-        int j = 1; /* First option to parse in argv[] */
+        int j = 1; /* 在argv[]中解析的第一个选项 */
         sds options = sdsempty();
         char *configfile = NULL;
 
-        /* Handle special options --help and --version */
+        /* 处理特殊选项 --help 和 --version */
         if (strcmp(argv[1], "-v") == 0 ||
-            strcmp(argv[1], "--version") == 0) version();
+            strcmp(argv[1], "--version") == 0) version();           // 显示版本
         if (strcmp(argv[1], "--help") == 0 ||
-            strcmp(argv[1], "-h") == 0) usage();
+            strcmp(argv[1], "-h") == 0) usage();            // 显示用法
         if (strcmp(argv[1], "--test-memory") == 0) {
             if (argc == 3) {
                 memtest(atoi(argv[2]),50);
@@ -3644,6 +3641,7 @@ int main(int argc, char **argv) {
         loadServerConfig(configfile,options);
         sdsfree(options);
     } else {
+        // 以redis-server 不带命令行参数的方式启动服务器
         redisLog(REDIS_WARNING, "Warning: no config file specified, using the default config. In order to specify a config file use %s /path/to/%s.conf", argv[0], server.sentinel_mode ? "sentinel" : "redis");
     }
     if (server.daemonize) daemonize();

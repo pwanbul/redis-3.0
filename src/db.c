@@ -819,35 +819,34 @@ void propagateExpire(redisDb *db, robj *key) {
     decrRefCount(argv[1]);
 }
 
+/* 惰性删除：执行任意命令之前检查键是否过期 */
 int expireIfNeeded(redisDb *db, robj *key) {
     mstime_t when = getExpire(db,key);
     mstime_t now;
 
-    if (when < 0) return 0; /* No expire for this key */
+    if (when < 0) return 0; /* 此key不会过期 */
 
-    /* Don't expire anything while loading. It will be done later. */
+    /* 加载时不要过期任何东西。稍后会完成。 */
     if (server.loading) return 0;
 
-    /* If we are in the context of a Lua script, we claim that time is
-     * blocked to when the Lua script started. This way a key can expire
-     * only the first time it is accessed and not in the middle of the
-     * script execution, making propagation to slaves / AOF consistent.
-     * See issue #1525 on Github for more information. */
+    /* 如果我们在 Lua 脚本的上下文中，我们声称时间被阻塞到 Lua 脚本开始的时候。
+     * 这样，key只能在第一次访问时过期，而不是在脚本执行过程中过期，
+     * 从而使传播到从属AOF保持一致。
+     * 有关更多信息，请参阅 Github 上的 issue 1525。 */
     now = server.lua_caller ? server.lua_time_start : mstime();
 
-    /* If we are running in the context of a slave, return ASAP:
-     * the slave key expiration is controlled by the master that will
-     * send us synthesized DEL operations for expired keys.
+    /* 如果我们在从属上下文中运行，请尽快返回：从属key到期由主控控制，
+     * 主控将向我们发送过期密钥的合成DEL操作。
      *
-     * Still we try to return the right information to the caller,
-     * that is, 0 if we think the key should be still valid, 1 if
-     * we think the key is expired at this time. */
+     * 我们仍然尝试向调用者返回正确的信息，
+     * 即，如果我们认为key应该仍然有效，则为 0，
+     * 如果我们认为此时密钥已过期，则为 1。 */
     if (server.masterhost != NULL) return now > when;
 
-    /* Return when this key has not expired */
+    /* 当此密钥未过期时返回 */
     if (now <= when) return 0;
 
-    /* Delete the key */
+    /* 删除密钥 */
     server.stat_expiredkeys++;
     propagateExpire(db,key);
     notifyKeyspaceEvent(REDIS_NOTIFY_EXPIRED,
@@ -912,18 +911,22 @@ void expireGenericCommand(redisClient *c, long long basetime, int unit) {
     }
 }
 
+/* expire */
 void expireCommand(redisClient *c) {
     expireGenericCommand(c,mstime(),UNIT_SECONDS);
 }
 
+/* expireat */
 void expireatCommand(redisClient *c) {
     expireGenericCommand(c,0,UNIT_SECONDS);
 }
 
+/* pexpire */
 void pexpireCommand(redisClient *c) {
     expireGenericCommand(c,mstime(),UNIT_MILLISECONDS);
 }
 
+/* pexpireat */
 void pexpireatCommand(redisClient *c) {
     expireGenericCommand(c,0,UNIT_MILLISECONDS);
 }

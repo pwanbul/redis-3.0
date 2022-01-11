@@ -297,10 +297,12 @@ void freeHashObject(robj *o) {
     }
 }
 
+/* robj引用加1 */
 void incrRefCount(robj *o) {
     o->refcount++;
 }
 
+/* robj引用减1 */
 void decrRefCount(robj *o) {
     if (o->refcount <= 0) redisPanic("decrRefCount against refcount <= 0");
     if (o->refcount == 1) {
