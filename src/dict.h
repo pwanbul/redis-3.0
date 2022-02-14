@@ -51,7 +51,7 @@ typedef struct dictEntry {
     union {
         void *val;
         uint64_t u64;
-        int64_t s64;
+        int64_t s64;            // 保存超时时间戳，毫秒
         double d;
     } v;            // 值
     struct dictEntry *next;         // 下一个节点，单链表，头插

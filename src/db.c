@@ -86,17 +86,16 @@ robj *lookupKeyWriteOrReply(redisClient *c, robj *key, robj *reply) {
     return o;
 }
 
-/* Add the key to the DB. It's up to the caller to increment the reference
- * counter of the value if needed.
+/* 将key添加到数据库。如果需要，由调用者增加值的引用计数器。
  *
- * The program is aborted if the key already exists. */
+ * 如果key已经存在，程序将中止。 */
 void dbAdd(redisDb *db, robj *key, robj *val) {
     sds copy = sdsdup(key->ptr);
     int retval = dictAdd(db->dict, copy, val);
 
     redisAssertWithInfo(NULL,key,retval == REDIS_OK);
     if (val->type == REDIS_LIST) signalListAsReady(db, key);
-    if (server.cluster_enabled) slotToKeyAdd(key);
+    if (server.cluster_enabled) slotToKeyAdd(key);          // 加入虚拟槽
  }
 
 /* Overwrite an existing key with a new value. Incrementing the reference
@@ -158,10 +157,9 @@ robj *dbRandomKey(redisDb *db) {
     }
 }
 
-/* Delete a key, value, and associated expiration entry if any, from the DB */
+/* 从数据库中删除键、值和关联的过期条目（如果有） */
 int dbDelete(redisDb *db, robj *key) {
-    /* Deleting an entry from the expires dict will not free the sds of
-     * the key, because it is shared with the main dictionary. */
+    /* 从expires字典中删除条目不会释放key的sds，因为它与主字典共享。 */
     if (dictSize(db->expires) > 0) dictDelete(db->expires,key->ptr);
     if (dictDelete(db->dict,key->ptr) == DICT_OK) {
         if (server.cluster_enabled) slotToKeyDel(key);
@@ -760,7 +758,7 @@ void moveCommand(redisClient *c) {
 }
 
 /*-----------------------------------------------------------------------------
- * Expires API
+ * 过期处理
  *----------------------------------------------------------------------------*/
 
 int removeExpire(redisDb *db, robj *key) {
@@ -773,7 +771,7 @@ int removeExpire(redisDb *db, robj *key) {
 void setExpire(redisDb *db, robj *key, long long when) {
     dictEntry *kde, *de;
 
-    /* Reuse the sds from the main dict in the expire dict */
+    /* 在过期字典中重用主字典中的 sds */
     kde = dictFind(db->dict,key->ptr);
     redisAssertWithInfo(NULL,key,kde != NULL);
     de = dictReplaceRaw(db->expires,dictGetKey(kde));
@@ -795,14 +793,11 @@ long long getExpire(redisDb *db, robj *key) {
     return dictGetSignedIntegerVal(de);
 }
 
-/* Propagate expires into slaves and the AOF file.
- * When a key expires in the master, a DEL operation for this key is sent
- * to all the slaves and the AOF file if enabled.
+/* 传播到slave和AOF文件中过期。
+ * 当主服务器中的key过期时，该key的DEL操作将发送到所有slave服务器和AOF文件（如果启用）。
  *
- * This way the key expiry is centralized in one place, and since both
- * AOF and the master->slave link guarantee operation ordering, everything
- * will be consistent even if we allow write operations against expiring
- * keys. */
+ * 这样，key过期集中在一个地方，并且由于AOF和主->从链接都保证操作顺序，
+ * 即使我们允许对过期key进行写操作，一切都会保持一致。 */
 void propagateExpire(redisDb *db, robj *key) {
     robj *argv[2];
 
@@ -843,10 +838,10 @@ int expireIfNeeded(redisDb *db, robj *key) {
      * 如果我们认为此时密钥已过期，则为 1。 */
     if (server.masterhost != NULL) return now > when;
 
-    /* 当此密钥未过期时返回 */
+    /* 当此key未过期时返回 */
     if (now <= when) return 0;
 
-    /* 删除密钥 */
+    /* 删除key */
     server.stat_expiredkeys++;
     propagateExpire(db,key);
     notifyKeyspaceEvent(REDIS_NOTIFY_EXPIRED,

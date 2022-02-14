@@ -604,8 +604,7 @@ void dictReleaseIterator(dictIterator *iter)
     zfree(iter);
 }
 
-/* Return a random entry from the hash table. Useful to
- * implement randomized algorithms */
+/* 从哈希表中返回一个随机条目。用于实现随机算法 */
 dictEntry *dictGetRandomKey(dict *d)
 {
     dictEntry *he, *orighe;
