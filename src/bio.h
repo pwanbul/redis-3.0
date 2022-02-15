@@ -27,6 +27,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+// 后台线程
+
 /* Exported API */
 void bioInit(void);
 void bioCreateBackgroundJob(int type, void *arg1, void *arg2, void *arg3);
@@ -38,4 +40,4 @@ void bioKillThreads(void);
 /* Background job opcodes */
 #define REDIS_BIO_CLOSE_FILE    0 /* Deferred close(2) syscall. */
 #define REDIS_BIO_AOF_FSYNC     1 /* Deferred AOF fsync. */
-#define REDIS_BIO_NUM_OPS       2
+#define REDIS_BIO_NUM_OPS       2 /* 目前有用到2个线程 */

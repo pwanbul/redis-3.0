@@ -195,8 +195,7 @@ ssize_t aofRewriteBufferWrite(int fd) {
  * AOF file implementation
  * ------------------------------------------------------------------------- */
 
-/* Starts a background task that performs fsync() against the specified
- * file descriptor (the one of the AOF file) in another thread. */
+/* 启动一个后台任务，在另一个线程中针对指定的文件描述符（AOF文件之一）执行fsync()。 */
 void aof_background_fsync(int fd) {
     bioCreateBackgroundJob(REDIS_BIO_AOF_FSYNC,(void*)(long)fd,NULL,NULL);
 }
@@ -251,31 +250,26 @@ int startAppendOnly(void) {
     return REDIS_OK;
 }
 
-/* Write the append only file buffer on disk.
+/* 将AOF文件缓冲区写入磁盘
  *
- * Since we are required to write the AOF before replying to the client,
- * and the only way the client socket can get a write is entering when the
- * the event loop, we accumulate all the AOF writes in a memory
- * buffer and write it on disk using this function just before entering
- * the event loop again.
+ * 由于我们需要在回复客户端之前写入AOF，并且客户端套接字获得
+ * 写入的唯一方法是在事件循环时进入，我们将所有AOF写入累积在内存缓冲区中，
+ * 并使用它将其写入磁盘在再次进入事件循环之前运行。
  *
- * About the 'force' argument:
+ * 关于'force'参数:
  *
- * When the fsync policy is set to 'everysec' we may delay the flush if there
- * is still an fsync() going on in the background thread, since for instance
- * on Linux write(2) will be blocked by the background fsync anyway.
- * When this happens we remember that there is some aof buffer to be
- * flushed ASAP, and will try to do that in the serverCron() function.
+ * 当fsync策略设置为'everysec'时，如果后台线程中仍有fsync()进行，
+ * 我们可能会延迟刷新，因为例如在Linux上write(2)无论如何都会被后台fsync阻塞。
+ * 当这种情况发生时，我们记得有一些缓冲区要尽快刷新，并将尝试在serverCron()函数中执行此操作。
  *
- * However if force is set to 1 we'll write regardless of the background
- * fsync. */
+ * 但是，如果force设置为1，我们将不考虑背景fsync进行写入。 */
 #define AOF_WRITE_LOG_ERROR_RATE 30 /* Seconds between errors logging. */
 void flushAppendOnlyFile(int force) {
     ssize_t nwritten;
     int sync_in_progress = 0;
     mstime_t latency;
 
-    if (sdslen(server.aof_buf) == 0) return;
+    if (sdslen(server.aof_buf) == 0) return;            // aof_buf缓冲区为0
 
     if (server.aof_fsync == AOF_FSYNC_EVERYSEC)
         sync_in_progress = bioPendingJobsOfType(REDIS_BIO_AOF_FSYNC) != 0;
@@ -416,18 +410,17 @@ void flushAppendOnlyFile(int force) {
         (server.aof_child_pid != -1 || server.rdb_child_pid != -1))
             return;
 
-    /* Perform the fsync if needed. */
+    /* 如果需要，执行fsync。 */
     if (server.aof_fsync == AOF_FSYNC_ALWAYS) {
-        /* aof_fsync is defined as fdatasync() for Linux in order to avoid
-         * flushing metadata. */
+        /* aof_fsync被定义为Linux的fdatasync()以避免刷新元数据。*/
         latencyStartMonitor(latency);
-        aof_fsync(server.aof_fd); /* Let's try to get this data on the disk */
+        aof_fsync(server.aof_fd); /* 让我们尝试在磁盘上获取这些数据 */
         latencyEndMonitor(latency);
         latencyAddSampleIfNeeded("aof-fsync-always",latency);
         server.aof_last_fsync = server.unixtime;
     } else if ((server.aof_fsync == AOF_FSYNC_EVERYSEC &&
                 server.unixtime > server.aof_last_fsync)) {
-        if (!sync_in_progress) aof_background_fsync(server.aof_fd);
+        if (!sync_in_progress) aof_background_fsync(server.aof_fd);     // 加入队列中，等待线程来处理
         server.aof_last_fsync = server.unixtime;
     }
 }
@@ -1477,7 +1470,7 @@ void backgroundRewriteDoneHandler(int exitcode, int bysignal) {
         if (server.aof_state == REDIS_AOF_WAIT_REWRITE)
             server.aof_state = REDIS_AOF_ON;
 
-        /* Asynchronously close the overwritten AOF. */
+        /* 异步关闭覆盖的AOF。 */
         if (oldfd != -1) bioCreateBackgroundJob(REDIS_BIO_CLOSE_FILE,(void*)(long)oldfd,NULL,NULL);
 
         redisLog(REDIS_VERBOSE,

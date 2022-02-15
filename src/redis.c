@@ -1859,7 +1859,7 @@ void initServer(void) {
     scriptingInit();
     slowlogInit();
     latencyMonitorInit();
-    bioInit();
+    bioInit();      // 初始化后台线程，目前只有2个
 }
 
 /* Populates the Redis Command Table starting from the hard coded list
