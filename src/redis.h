@@ -232,9 +232,9 @@ typedef long long mstime_t; /* millisecond time type. */
 #define REDIS_SLAVE (1<<0)   /* This client is a slave server */
 #define REDIS_MASTER (1<<1)  /* This client is a master server */
 #define REDIS_MONITOR (1<<2) /* This client is a slave monitor, see MONITOR */
-#define REDIS_MULTI (1<<3)   /* This client is in a MULTI context */
+#define REDIS_MULTI (1<<3)   /* 此客户端处于MULTI上下文中，客户端进入事务状态 */
 #define REDIS_BLOCKED (1<<4) /* The client is waiting in a blocking operation */
-#define REDIS_DIRTY_CAS (1<<5) /* Watched keys modified. EXEC will fail. */
+#define REDIS_DIRTY_CAS (1<<5) /* 监视键已修改。执行将失败。 */
 #define REDIS_CLOSE_AFTER_REPLY (1<<6) /* Close after writing entire reply. */
 #define REDIS_UNBLOCKED (1<<7) /* This client was unblocked and is stored in
                                   server.unblocked_clients */
@@ -242,7 +242,7 @@ typedef long long mstime_t; /* millisecond time type. */
 #define REDIS_ASKING (1<<9)     /* Client issued the ASKING command */
 #define REDIS_CLOSE_ASAP (1<<10)/* Close this client ASAP */
 #define REDIS_UNIX_SOCKET (1<<11) /* Client connected via Unix domain socket */
-#define REDIS_DIRTY_EXEC (1<<12)  /* EXEC will fail for errors while queueing */
+#define REDIS_DIRTY_EXEC (1<<12)  /* 排队时EXEC将因错误而失败 */
 #define REDIS_MASTER_FORCE_REPLY (1<<13)  /* Queue replies even if is master */
 #define REDIS_FORCE_AOF (1<<14)   /* Force AOF propagation of current cmd. */
 #define REDIS_FORCE_REPL (1<<15)  /* Force replication of current cmd. */
@@ -459,22 +459,23 @@ typedef struct redisDb {
     dict *expires;              /* 设置超时的键超时 */
     dict *blocking_keys;        /* Keys with clients waiting for data (BLPOP) */
     dict *ready_keys;           /* Blocked keys that received a PUSH */
-    dict *watched_keys;         /* WATCHED keys for MULTI/EXEC CAS */
+    dict *watched_keys;         /* MULTI/EXEC CAS的WATCHED键，值是一个链表，里面保存watch该keyd的客户端 */
     struct evictionPoolEntry *eviction_pool;    /* 驱逐key池 */
     int id;                     /* 数据库标识 */
     long long avg_ttl;          /* Average TTL 定期删除key时，随机到未过期的key时更新该值 */
 } redisDb;
 
-/* Client MULTI/EXEC state */
+/* 事务队列中的事务 */
 typedef struct multiCmd {
     robj **argv;
     int argc;
     struct redisCommand *cmd;
 } multiCmd;
 
+/* 事务状态 */
 typedef struct multiState {
-    multiCmd *commands;     /* Array of MULTI commands */
-    int count;              /* Total number of MULTI commands */
+    multiCmd *commands;     /* 事务队列，FIFO顺序 */
+    int count;              /* 已入队命令计数 */
     int minreplicas;        /* MINREPLICAS for synchronous replication */
     time_t minreplicas_timeout; /* MINREPLICAS timeout as unixtime. */
 } multiState;
@@ -549,11 +550,11 @@ typedef struct redisClient {
     long long repl_ack_time;/* replication ack time, if this is a slave */
     char replrunid[REDIS_RUN_ID_SIZE+1]; /* master run id if this is a master */
     int slave_listening_port; /* As configured with: SLAVECONF listening-port */
-    multiState mstate;      /* MULTI/EXEC state */
+    multiState mstate;      /* 事务状态 */
     int btype;              /* Type of blocking op if REDIS_BLOCKED. */
     blockingState bpop;     /* blocking state */
     long long woff;         /* Last write global replication offset. */
-    list *watched_keys;     /* Keys WATCHED for MULTI/EXEC CAS */
+    list *watched_keys;     /* 为 MULTI/EXEC CAS 关注的key */
     dict *pubsub_channels;  /* channels a client is interested in (SUBSCRIBE) */
     list *pubsub_patterns;  /* patterns a client is interested in (SUBSCRIBE) */
     sds peerid;             /* Cached peer ID. */

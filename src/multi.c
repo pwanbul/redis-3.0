@@ -76,19 +76,20 @@ void discardTransaction(redisClient *c) {
     unwatchAllKeys(c);
 }
 
-/* Flag the transacation as DIRTY_EXEC so that EXEC will fail.
- * Should be called every time there is an error while queueing a command. */
+/* 将事务标记为DIRTY_EXEC，以便EXEC失败。
+ * 每次在排队命令时出现错误时都应该调用。 */
 void flagTransaction(redisClient *c) {
     if (c->flags & REDIS_MULTI)
         c->flags |= REDIS_DIRTY_EXEC;
 }
 
+/* multi命令 */
 void multiCommand(redisClient *c) {
     if (c->flags & REDIS_MULTI) {
         addReplyError(c,"MULTI calls can not be nested");
         return;
     }
-    c->flags |= REDIS_MULTI;
+    c->flags |= REDIS_MULTI;            // 将客户端设置成事务状态
     addReply(c,shared.ok);
 }
 
@@ -123,12 +124,12 @@ void execCommand(redisClient *c) {
         return;
     }
 
-    /* Check if we need to abort the EXEC because:
-     * 1) Some WATCHed key was touched.
-     * 2) There was a previous error while queueing commands.
-     * A failed EXEC in the first case returns a multi bulk nil object
-     * (technically it is not an error but a special behavior), while
-     * in the second an EXECABORT error is returned. */
+    /* 检查我们是否需要中止 EXEC，因为：
+     * 1) 触摸了某个WATCHed键。
+     * 2) 排队命令时出现先前的错误。
+     * 在第一种情况下，失败的EXEC返回一个多批量nil对象
+     * （从技术上讲，它不是错误，而是一种特殊行为），
+     * 而在第二种情况下，则返回EXECABORT错误。 */
     if (c->flags & (REDIS_DIRTY_CAS|REDIS_DIRTY_EXEC)) {
         addReply(c, c->flags & REDIS_DIRTY_EXEC ? shared.execaborterr :
                                                   shared.nullmultibulk);
@@ -137,28 +138,29 @@ void execCommand(redisClient *c) {
     }
 
     /* Exec all the queued commands */
-    unwatchAllKeys(c); /* Unwatch ASAP otherwise we'll waste CPU cycles */
+    unwatchAllKeys(c); /* 尽快unwatch，否则我们将浪费CPU周期 */
+    // 暂存客户端的相关参数，防止被覆盖
     orig_argv = c->argv;
     orig_argc = c->argc;
     orig_cmd = c->cmd;
     addReplyMultiBulkLen(c,c->mstate.count);
-    for (j = 0; j < c->mstate.count; j++) {
+    for (j = 0; j < c->mstate.count; j++) {         // 遍历队列中的命令，并执行
         c->argc = c->mstate.commands[j].argc;
         c->argv = c->mstate.commands[j].argv;
         c->cmd = c->mstate.commands[j].cmd;
 
-        /* Propagate a MULTI request once we encounter the first write op.
-         * This way we'll deliver the MULTI/..../EXEC block as a whole and
-         * both the AOF and the replication link will have the same consistency
-         * and atomicity guarantees. */
+        /* 一旦我们遇到第一个写操作，就传播一个 MULTI 请求。
+         * 这样，我们将作为一个整体交付MULTI....EXEC块，
+         * 并且AOF和复制链接都将具有相同的一致性和原子性保证。
+         * */
         if (!must_propagate && !(c->cmd->flags & REDIS_CMD_READONLY)) {
             execCommandPropagateMulti(c);
             must_propagate = 1;
         }
 
-        call(c,REDIS_CALL_FULL);
+        call(c,REDIS_CALL_FULL);        // 执行命令，如果在call时出错，不处理
 
-        /* Commands may alter argc/argv, restore mstate. */
+        /* 命令可能会改变argc/argv，恢复mstate. */
         c->mstate.commands[j].argc = c->argc;
         c->mstate.commands[j].argv = c->argv;
         c->mstate.commands[j].cmd = c->cmd;
@@ -183,53 +185,57 @@ handle_monitor:
 
 /* ===================== WATCH (CAS alike for MULTI/EXEC) ===================
  *
- * The implementation uses a per-DB hash table mapping keys to list of clients
- * WATCHing those keys, so that given a key that is going to be modified
- * we can mark all the associated clients as dirty.
+ * 该实现使用每个DB哈希表映射键到正在监视这些键的客户端列表，
+ * 因此给定将要修改的键，我们可以将所有关联的客户端标记为脏。
  *
- * Also every client contains a list of WATCHed keys so that's possible to
- * un-watch such keys when the client is freed or when UNWATCH is called. */
+ * 此外，每个客户端都包含一个WATCHed键的列表，
+ * 因此可以在客户端被释放或调用UNWATCH时取消监视这些键。
+ * */
 
-/* In the client->watched_keys list we need to use watchedKey structures
- * as in order to identify a key in Redis we need both the key name and the
- * DB */
+/* 在client->watched_keys列表中，我们需要使用watchKey结构，
+ * 因为为了识别Redis中的键，我们需要键名和数据库
+ *
+ * 
+ *
+ * */
 typedef struct watchedKey {
-    robj *key;
-    redisDb *db;
+    robj *key;          // 执向key的指针
+    redisDb *db;        // 指向保存该key的数据库的指针
 } watchedKey;
 
-/* Watch for the specified key */
+/* watch指定的key */
 void watchForKey(redisClient *c, robj *key) {
     list *clients = NULL;
     listIter li;
     listNode *ln;
     watchedKey *wk;
 
-    /* Check if we are already watching for this key */
+    // 注意区分，redisDb中的watched_keys和RedisClient中的watched_keys
+
+    /* 检查我们是否已经在关注这个密钥 */
     listRewind(c->watched_keys,&li);
     while((ln = listNext(&li))) {
         wk = listNodeValue(ln);
         if (wk->db == c->db && equalStringObjects(key,wk->key))
-            return; /* Key already watched */
+            return; /* key已经客户端被watch */
     }
-    /* This key is not already watched in this DB. Let's add it */
+    /* 此数据库中尚未查看此密钥。让我们添加它 */
     clients = dictFetchValue(c->db->watched_keys,key);
     if (!clients) {
         clients = listCreate();
         dictAdd(c->db->watched_keys,key,clients);
         incrRefCount(key);
     }
-    listAddNodeTail(clients,c);
-    /* Add the new key to the list of keys watched by this client */
+    listAddNodeTail(clients,c);         // 将客户端加入数据库的watch字典的val中，该val是一个list
+    /* 将新key添加到此客户端监视的key列表中 */
     wk = zmalloc(sizeof(*wk));
     wk->key = key;
     wk->db = c->db;
     incrRefCount(key);
-    listAddNodeTail(c->watched_keys,wk);
+    listAddNodeTail(c->watched_keys,wk);        // 将key加客户端的watch列表中
 }
 
-/* Unwatch all the keys watched by this client. To clean the EXEC dirty
- * flag is up to the caller. */
+/* unwatch此客户端监视的所有键。清除EXEC脏标志取决于调用者。 */
 void unwatchAllKeys(redisClient *c) {
     listIter li;
     listNode *ln;
@@ -240,8 +246,7 @@ void unwatchAllKeys(redisClient *c) {
         list *clients;
         watchedKey *wk;
 
-        /* Lookup the watched key -> clients list and remove the client
-         * from the list */
+        /* 查找被watch的键->客户端列表并从列表中删除客户端 */
         wk = listNodeValue(ln);
         clients = dictFetchValue(wk->db->watched_keys, wk->key);
         redisAssertWithInfo(c,NULL,clients != NULL);
@@ -256,8 +261,7 @@ void unwatchAllKeys(redisClient *c) {
     }
 }
 
-/* "Touch" a key, so that if this key is being WATCHed by some client the
- * next EXEC will fail. */
+/* “touch”一个键，这样如果某个客户端正在监视该键，则下一个EXEC将失败。 */
 void touchWatchedKey(redisDb *db, robj *key) {
     list *clients;
     listIter li;
@@ -267,10 +271,11 @@ void touchWatchedKey(redisDb *db, robj *key) {
     clients = dictFetchValue(db->watched_keys, key);
     if (!clients) return;
 
-    /* Mark all the clients watching this key as REDIS_DIRTY_CAS */
-    /* Check if we are already watching for this key */
+    /* 将所有正在watch此key的客户端标记为REDIS_DIRTY_CAS */
+    /* 检查我们是否已经在watch这个key */
     listRewind(clients,&li);
     while((ln = listNext(&li))) {
+        // 把所有watch了该key的客户端都记上REDIS_DIRTY_CAS
         redisClient *c = listNodeValue(ln);
 
         c->flags |= REDIS_DIRTY_CAS;
@@ -304,20 +309,22 @@ void touchWatchedKeysOnFlush(int dbid) {
     }
 }
 
+/* watch命令 */
 void watchCommand(redisClient *c) {
     int j;
 
-    if (c->flags & REDIS_MULTI) {
+    if (c->flags & REDIS_MULTI) {           // 只有当客户端处在非事务状态时，才能执行
         addReplyError(c,"WATCH inside MULTI is not allowed");
         return;
     }
-    for (j = 1; j < c->argc; j++)
+    for (j = 1; j < c->argc; j++)           // 可以设置多个key
         watchForKey(c,c->argv[j]);
     addReply(c,shared.ok);
 }
 
+/* unwatch命令，一次性全部取消客户端所有watch的key */
 void unwatchCommand(redisClient *c) {
     unwatchAllKeys(c);
-    c->flags &= (~REDIS_DIRTY_CAS);
+    c->flags &= (~REDIS_DIRTY_CAS);         // 取消客户端脏状态
     addReply(c,shared.ok);
 }
