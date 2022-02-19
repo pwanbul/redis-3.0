@@ -334,14 +334,14 @@ typedef long long mstime_t; /* millisecond time type. */
 #define REDIS_OP_DIFF 1
 #define REDIS_OP_INTER 2
 
-/* Redis maxmemory strategies */
+/* Redis最大内存策略 */
 #define REDIS_MAXMEMORY_VOLATILE_LRU 0
 #define REDIS_MAXMEMORY_VOLATILE_TTL 1
 #define REDIS_MAXMEMORY_VOLATILE_RANDOM 2
 #define REDIS_MAXMEMORY_ALLKEYS_LRU 3
 #define REDIS_MAXMEMORY_ALLKEYS_RANDOM 4
-#define REDIS_MAXMEMORY_NO_EVICTION 5
-#define REDIS_DEFAULT_MAXMEMORY_POLICY REDIS_MAXMEMORY_NO_EVICTION
+#define REDIS_MAXMEMORY_NO_EVICTION 5           // 不进行key驱逐
+#define REDIS_DEFAULT_MAXMEMORY_POLICY REDIS_MAXMEMORY_NO_EVICTION      // 默认
 
 /* Scripting */
 #define REDIS_LUA_TIME_LIMIT 5000 /* milliseconds */
@@ -408,7 +408,7 @@ typedef long long mstime_t; /* millisecond time type. */
 /* 实际的Redis对象 */
 #define REDIS_LRU_BITS 24
 #define REDIS_LRU_CLOCK_MAX ((1<<REDIS_LRU_BITS)-1) /* Max value of obj->lru */
-#define REDIS_LRU_CLOCK_RESOLUTION 1000 /* LRU clock resolution in ms */
+#define REDIS_LRU_CLOCK_RESOLUTION 1000 /* 1个LRU时间为1000ms */
 typedef struct redisObject {
     unsigned type:4;        // 5种类型之一
     unsigned encoding:4;        // 实现某种类型的具体数据结构
@@ -417,10 +417,17 @@ typedef struct redisObject {
     void *ptr;      // 实际的数据
 } robj;
 
-/* Macro used to obtain the current LRU clock.
- * If the current resolution is lower than the frequency we refresh the
- * LRU clock (as it should be in production servers) we return the
- * precomputed value, otherwise we need to resort to a function call. */
+/* 用于获取当前LRU时钟的宏。
+ * 如果当前分辨率低于我们刷新LRU时钟的频率
+ * （因为它应该在生产服务器中）我们返回预先计算的值，
+ * 否则我们需要求助于函数调用。
+ *
+ * server.hz默认为10，即serverCron每100ms调用1次，
+ * server.lrucloc在serverCron中更新，因此server.lruclock也是每100ms更新一次。
+ *
+ * 当serverCron的更新间隔小于REDIS_LRU_CLOCK_RESOLUTION时，可以直接从server.lruclock
+ * 中获取时间，否则需要调用getLRUClock()。
+ * */
 #define LRU_CLOCK() ((1000/server.hz <= REDIS_LRU_CLOCK_RESOLUTION) ? server.lruclock : getLRUClock())
 
 /* Macro used to initialize a Redis object allocated on the stack.
@@ -434,17 +441,15 @@ typedef struct redisObject {
     _var.ptr = _ptr; \
 } while(0);
 
-/* To improve the quality of the LRU approximation we take a set of keys
- * that are good candidate for eviction across freeMemoryIfNeeded() calls.
+/* 为了提高LRU近似的质量，我们采用了一组键，这些键是freeMemoryIfNeeded()调用中驱逐的良好候选者。
  *
- * Entries inside the eviciton pool are taken ordered by idle time, putting
- * greater idle times to the right (ascending order).
+ * 驱逐池中的条目按空闲时间排序，将更大的空闲时间放在右边（升序）。
  *
- * Empty entries have the key pointer set to NULL. */
+ * 空条目的键指针设置为NULL。 */
 #define REDIS_EVICTION_POOL_SIZE 16
 struct evictionPoolEntry {
-    unsigned long long idle;    /* Object idle time. */
-    sds key;                    /* Key name. */
+    unsigned long long idle;    /* 对象空闲时间 */
+    sds key;                    /* 键名 */
 };
 
 /* Redis 数据库表示。 有多个数据库由从 0（默认数据库）到最大配置数据库的整数标识。
@@ -455,9 +460,9 @@ typedef struct redisDb {
     dict *blocking_keys;        /* Keys with clients waiting for data (BLPOP) */
     dict *ready_keys;           /* Blocked keys that received a PUSH */
     dict *watched_keys;         /* WATCHED keys for MULTI/EXEC CAS */
-    struct evictionPoolEntry *eviction_pool;    /* Eviction pool of keys */
+    struct evictionPoolEntry *eviction_pool;    /* 驱逐key池 */
     int id;                     /* 数据库标识 */
-    long long avg_ttl;          /* Average TTL, just for stats */
+    long long avg_ttl;          /* Average TTL 定期删除key时，随机到未过期的key时更新该值 */
 } redisDb;
 
 /* Client MULTI/EXEC state */
@@ -656,7 +661,7 @@ struct redisServer {
     dict *commands;             /* Command table */
     dict *orig_commands;        /* Command table before command renaming. */
     aeEventLoop *el;
-    unsigned lruclock:REDIS_LRU_BITS; /* Clock for LRU eviction */
+    unsigned lruclock:REDIS_LRU_BITS; /* LRU驱逐的时钟 */
     int shutdown_asap;          /* SHUTDOWN needed ASAP */
     int activerehashing;        /* Incremental rehash in serverCron() */
     char *requirepass;          /* Pass for AUTH command, or NULL */
@@ -747,7 +752,7 @@ struct redisServer {
     pid_t aof_child_pid;            /* PID aof重写过程标记 */
     list *aof_rewrite_buf_blocks;   /* Hold changes during an AOF rewrite. */
     sds aof_buf;      /* AOF缓冲区，在进入事件循环之前写入 */
-    int aof_fd;       /* File descriptor of currently selected AOF file */
+    int aof_fd;       /* 当前选择的AOF文件的文件描述符 */
     int aof_selected_db; /* Currently selected DB in AOF */
     time_t aof_flush_postponed_start; /* UNIX time of postponed AOF flush */
     time_t aof_last_fsync;            /* UNIX time of last fsync() */

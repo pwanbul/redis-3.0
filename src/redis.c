@@ -850,6 +850,7 @@ void activeExpireCycle(int type) {
     }
 }
 
+// 当前时间
 unsigned int getLRUClock(void) {
     return (mstime()/REDIS_LRU_CLOCK_RESOLUTION) & REDIS_LRU_CLOCK_MAX;
 }
@@ -1075,7 +1076,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
      *
      * Note that you can change the resolution altering the
      * REDIS_LRU_CLOCK_RESOLUTION define. */
-    server.lruclock = getLRUClock();
+    server.lruclock = getLRUClock();        // 更新lru时间，秒
 
     /* Record the max memory used since the server was started. */
     if (zmalloc_used_memory() > server.stat_peak_memory)
@@ -1457,7 +1458,7 @@ void initServerConfig(void) {
     server.next_client_id = 1; /* Client IDs, start from 1 .*/
     server.loading_process_events_interval_bytes = (1024*1024*2);
 
-    server.lruclock = getLRUClock();
+    server.lruclock = getLRUClock();        // 初始化lru时间，秒
     resetServerSaveParams();
 
     appendServerSaveParams(60*60,1);  /* save after 1 hour and 1 change */
@@ -2166,11 +2167,10 @@ int processCommand(redisClient *c) {
         }
     }
 
-    /* Handle the maxmemory directive.
+    /* 处理maxmemory指令。
      *
-     * First we try to free some memory if possible (if there are volatile
-     * keys in the dataset). If there are not the only thing we can do
-     * is returning an error. */
+     * 首先，如果可能，我们会尝试释放一些内存（如果数据集中存在易失性键）。
+     * 如果不是我们唯一能做的就是返回一个错误。 */
     if (server.maxmemory) {
         int retval = freeMemoryIfNeeded();
         if ((c->cmd->flags & REDIS_CMD_DENYOOM) && retval == REDIS_ERR) {
@@ -3038,50 +3038,40 @@ void monitorCommand(redisClient *c) {
 
 /* ============================ Maxmemory directive  ======================== */
 
-/* freeMemoryIfNeeded() gets called when 'maxmemory' is set on the config
- * file to limit the max memory used by the server, before processing a
- * command.
+/* freeMemoryIfNeeded()在配置文件上设置“maxmemory”时被调用，
+ * 以限制服务器使用的最大内存，然后再处理命令。
  *
- * The goal of the function is to free enough memory to keep Redis under the
- * configured memory limit.
+ * 该函数的目标是释放足够的内存以使Redis保持在配置的内存限制之下。
  *
- * The function starts calculating how many bytes should be freed to keep
- * Redis under the limit, and enters a loop selecting the best keys to
- * evict accordingly to the configured policy.
+ * 该函数开始计算应该释放多少字节以使Redis保持在限制之下，
+ * 并进入一个循环，根据配置的策略选择最佳键来驱逐。
  *
- * If all the bytes needed to return back under the limit were freed the
- * function returns REDIS_OK, otherwise REDIS_ERR is returned, and the caller
- * should block the execution of commands that will result in more memory
- * used by the server.
+ * 如果在限制下返回所需的所有字节均已释放，则该函数返回REDIS_OK，
+ * 否则返回REDIS_ERR，并且调用者应阻止执行将导致服务器使用更多内存的命令。
  *
  * ------------------------------------------------------------------------
  *
- * LRU approximation algorithm
+ * LRU逼近算法
  *
- * Redis uses an approximation of the LRU algorithm that runs in constant
- * memory. Every time there is a key to expire, we sample N keys (with
- * N very small, usually in around 5) to populate a pool of best keys to
- * evict of M keys (the pool size is defined by REDIS_EVICTION_POOL_SIZE).
+ * Redis使用在恒定内存中运行的LRU算法的近似值。
+ * 每次有一个key过期时，我们采样N个key（N非常小，通常在5左右）
+ * 来填充一个最佳key池以驱逐M个key，池大小由REDIS_EVICTION_POOL_SIZE定义。
  *
- * The N keys sampled are added in the pool of good keys to expire (the one
- * with an old access time) if they are better than one of the current keys
- * in the pool.
+ * 如果采样的N个key优于池中的当前key之一，则将其添加到好key池中以过期（具有旧访问时间的key）。
  *
- * After the pool is populated, the best key we have in the pool is expired.
- * However note that we don't remove keys from the pool when they are deleted
- * so the pool may contain keys that no longer exist.
+ * 填充池后，我们在池中拥有的最佳key已过期。但是请注意，当key被删除时，
+ * 我们不会从池中删除它们，因此池可能包含不再存在的key。
  *
- * When we try to evict a key, and all the entries in the pool don't exist
- * we populate it again. This time we'll be sure that the pool has at least
- * one key that can be evicted, if there is at least one key that can be
- * evicted in the whole database. */
+ * 当我们试图驱逐一个键，并且池中的所有条目都不存在时，我们会再次填充它。
+ * 这一次我们将确保池中至少有一个可以被驱逐的key，如果整个数据库中至少有一个可以被驱逐的key。
+ * */
 
-/* Create a new eviction pool. */
+/* 创建一个新的驱逐池。 */
 struct evictionPoolEntry *evictionPoolAlloc(void) {
     struct evictionPoolEntry *ep;
     int j;
-
-    ep = zmalloc(sizeof(*ep)*REDIS_EVICTION_POOL_SIZE);
+    // 本质上是一个数组
+    ep = zmalloc(sizeof(*ep)*REDIS_EVICTION_POOL_SIZE);     // 最多16个key
     for (j = 0; j < REDIS_EVICTION_POOL_SIZE; j++) {
         ep[j].idle = 0;
         ep[j].key = NULL;
@@ -3089,14 +3079,12 @@ struct evictionPoolEntry *evictionPoolAlloc(void) {
     return ep;
 }
 
-/* This is an helper function for freeMemoryIfNeeded(), it is used in order
- * to populate the evictionPool with a few entries every time we want to
- * expire a key. Keys with idle time smaller than one of the current
- * keys are added. Keys are always added if there are free entries.
+/* 这是freeMemoryIfNeeded()的一个辅助函数，
+ * 它用于在每次我们想要使key过期时用一些条目填充evictionPool。
+ * 添加空闲时间小于当前key之一的key。如果有空闲条目，则始终添加key。
  *
- * We insert keys on place in ascending order, so keys with the smaller
- * idle time are on the left, and keys with the higher idle time on the
- * right. */
+ * 我们按升序插入键，因此空闲时间较短的键位于左侧，空闲时间较长的键位于右侧。
+ * */
 
 #define EVICTION_SAMPLES_ARRAY_SIZE 16
 void evictionPoolPopulate(dict *sampledict, dict *keydict, struct evictionPoolEntry *pool) {
@@ -3104,8 +3092,8 @@ void evictionPoolPopulate(dict *sampledict, dict *keydict, struct evictionPoolEn
     dictEntry *_samples[EVICTION_SAMPLES_ARRAY_SIZE];
     dictEntry **samples;
 
-    /* Try to use a static buffer: this function is a big hit...
-     * Note: it was actually measured that this helps. */
+    /* 尝试使用静态缓冲区：这个功能很受欢迎......
+     * 注意：实际上测量它有帮助。 */
     if (server.maxmemory_samples <= EVICTION_SAMPLES_ARRAY_SIZE) {
         samples = _samples;
     } else {
@@ -3121,56 +3109,51 @@ void evictionPoolPopulate(dict *sampledict, dict *keydict, struct evictionPoolEn
 
         de = samples[j];
         key = dictGetKey(de);
-        /* If the dictionary we are sampling from is not the main
-         * dictionary (but the expires one) we need to lookup the key
-         * again in the key dictionary to obtain the value object. */
+        /* 如果我们从中采样的字典不是主字典（而是过期字典），
+         * 我们需要在键字典中再次查找键以获取值对象。 */
         if (sampledict != keydict) de = dictFind(keydict, key);
         o = dictGetVal(de);
-        idle = estimateObjectIdleTime(o);
+        idle = estimateObjectIdleTime(o);           // 返回最近一次访问时间与现在的差，毫秒
 
-        /* Insert the element inside the pool.
-         * First, find the first empty bucket or the first populated
-         * bucket that has an idle time smaller than our idle time. */
+        /* 将元素插入池中。
+         * 首先，找到空闲时间小于我们空闲时间的第一个空桶或第一个填充桶。 */
         k = 0;
         while (k < REDIS_EVICTION_POOL_SIZE &&
                pool[k].key &&
                pool[k].idle < idle) k++;
+
         if (k == 0 && pool[REDIS_EVICTION_POOL_SIZE-1].key != NULL) {
-            /* Can't insert if the element is < the worst element we have
-             * and there are no empty buckets. */
+            /* 如果元素<我们拥有的最差元素并且没有空桶，则无法插入。 */
             continue;
         } else if (k < REDIS_EVICTION_POOL_SIZE && pool[k].key == NULL) {
-            /* Inserting into empty position. No setup needed before insert. */
+            /* 插入空位。插入前无需设置。*/
         } else {
-            /* Inserting in the middle. Now k points to the first element
-             * greater than the element to insert.  */
+            /* 插入中间。现在k指向第一个大于等于要插入的元素的元素。  */
             if (pool[REDIS_EVICTION_POOL_SIZE-1].key == NULL) {
-                /* Free space on the right? Insert at k shifting
-                 * all the elements from k to end to the right. */
+                /* 右边的空闲空间？在k处插入，将所有元素从k到end向右移动。 */
                 memmove(pool+k+1,pool+k,
                     sizeof(pool[0])*(REDIS_EVICTION_POOL_SIZE-k-1));
             } else {
-                /* No free space on right? Insert at k-1 */
+                /* 右边没有空闲空间？在k-1处插入*/
                 k--;
-                /* Shift all elements on the left of k (included) to the
-                 * left, so we discard the element with smaller idle time. */
+                /* 将k（包括）左边的所有元素向左移动，所以我们丢弃空闲时间较小的元素。 */
                 sdsfree(pool[0].key);
                 memmove(pool,pool+1,sizeof(pool[0])*k);
             }
         }
-        pool[k].key = sdsdup(key);
+        pool[k].key = sdsdup(key);          // 复制进池中，而不是引用
         pool[k].idle = idle;
     }
     if (samples != _samples) zfree(samples);
 }
 
+// key驱逐，释放内存
 int freeMemoryIfNeeded(void) {
     size_t mem_used, mem_tofree, mem_freed;
     int slaves = listLength(server.slaves);
     mstime_t latency, eviction_latency;
 
-    /* Remove the size of slaves output buffers and AOF buffer from the
-     * count of used memory. */
+    /* 从已用内存计数中删除从属输出缓冲区和AOF缓冲区的大小。 */
     mem_used = zmalloc_used_memory();
     if (slaves) {
         listIter li;
@@ -3191,13 +3174,13 @@ int freeMemoryIfNeeded(void) {
         mem_used -= aofRewriteBufferSize();
     }
 
-    /* Check if we are over the memory limit. */
+    /* 检查我们是否超过了内存限制. */
     if (mem_used <= server.maxmemory) return REDIS_OK;
 
     if (server.maxmemory_policy == REDIS_MAXMEMORY_NO_EVICTION)
-        return REDIS_ERR; /* We need to free memory, but policy forbids. */
+        return REDIS_ERR; /* 我们需要释放内存，但政策禁止。 */
 
-    /* Compute how much memory we need to free. */
+    /* 计算我们需要释放多少内存。 */
     mem_tofree = mem_used - server.maxmemory;
     mem_freed = 0;
     latencyStartMonitor(latency);
@@ -3206,7 +3189,7 @@ int freeMemoryIfNeeded(void) {
 
         for (j = 0; j < server.dbnum; j++) {
             long bestval = 0; /* just to prevent warning */
-            sds bestkey = NULL;
+            sds bestkey = NULL;         // 按某种策略找到最佳驱逐key
             dictEntry *de;
             redisDb *db = server.db+j;
             dict *dict;
@@ -3220,7 +3203,9 @@ int freeMemoryIfNeeded(void) {
             }
             if (dictSize(dict) == 0) continue;
 
-            /* volatile-random and allkeys-random policy */
+            /* volatile-random and allkeys-random policy
+             * RANDOM策略不涉及驱逐池，随机一个key即可
+             * */
             if (server.maxmemory_policy == REDIS_MAXMEMORY_ALLKEYS_RANDOM ||
                 server.maxmemory_policy == REDIS_MAXMEMORY_VOLATILE_RANDOM)
             {
@@ -3235,29 +3220,33 @@ int freeMemoryIfNeeded(void) {
                 struct evictionPoolEntry *pool = db->eviction_pool;
 
                 while(bestkey == NULL) {
+                    // 更新驱逐池，驱逐池中保存的是的最应该驱逐的keu(做多16个)
                     evictionPoolPopulate(dict, db->dict, db->eviction_pool);
-                    /* Go backward from best to worst element to evict. */
+                    /* 从最好到最差的元素倒退到驱逐。
+                     * 从右边开始处理，右边比左边更加应该驱逐。
+                     * */
                     for (k = REDIS_EVICTION_POOL_SIZE-1; k >= 0; k--) {
                         if (pool[k].key == NULL) continue;
                         de = dictFind(dict,pool[k].key);
 
-                        /* Remove the entry from the pool. */
+                        /* 从池中删除条目。 注意：放入池中时是复制进来的 */
                         sdsfree(pool[k].key);
-                        /* Shift all elements on its right to left. */
+                        /* 将其从右到左的所有元素移动。 */
                         memmove(pool+k,pool+k+1,
                             sizeof(pool[0])*(REDIS_EVICTION_POOL_SIZE-k-1));
-                        /* Clear the element on the right which is empty
-                         * since we shifted one position to the left.  */
+                        /* 清除右侧为空的元素，因为我们向左移动了一个位置。 */
                         pool[REDIS_EVICTION_POOL_SIZE-1].key = NULL;
                         pool[REDIS_EVICTION_POOL_SIZE-1].idle = 0;
 
-                        /* If the key exists, is our pick. Otherwise it is
-                         * a ghost and we need to try the next element. */
+                        /* 如果key存在，就是我们的选择。
+                         * 否则它是一个幽灵，我们需要尝试下一个元素。 */
                         if (de) {
                             bestkey = dictGetKey(de);
                             break;
                         } else {
-                            /* Ghost... */
+                            /* 放入池中是复制的key，所以可能会出现
+                             * key已经被删除的情况，即幽灵。
+                             * */
                             continue;
                         }
                     }
@@ -3272,10 +3261,9 @@ int freeMemoryIfNeeded(void) {
 
                     de = dictGetRandomKey(dict);
                     thiskey = dictGetKey(de);
-                    thisval = (long) dictGetVal(de);
+                    thisval = (long) dictGetVal(de);            // thisval为expire字典中过期时间
 
-                    /* Expire sooner (minor expire unix timestamp) is better
-                     * candidate for deletion */
+                    /* 越早过期（次要过期 unix 时间戳）是更好的删除候选者 */
                     if (bestkey == NULL || thisval < bestval) {
                         bestkey = thiskey;
                         bestval = thisval;
@@ -3283,29 +3271,27 @@ int freeMemoryIfNeeded(void) {
                 }
             }
 
-            /* Finally remove the selected key. */
+            /* 最后删除选定的键。 */
             if (bestkey) {
                 long long delta;
 
                 robj *keyobj = createStringObject(bestkey,sdslen(bestkey));
-                propagateExpire(db,keyobj);
-                /* We compute the amount of memory freed by dbDelete() alone.
-                 * It is possible that actually the memory needed to propagate
-                 * the DEL in AOF and replication link is greater than the one
-                 * we are freeing removing the key, but we can't account for
-                 * that otherwise we would never exit the loop.
+                propagateExpire(db,keyobj);     // 处理命令传播，以及向AOF中追加删除操作
+                /* 我们单独计算dbDelete()释放的内存量。实际上，
+                 * 在AOF和复制链接中传播DEL所需的内存可能
+                 * 大于我们在删除key时释放的内存，但我们
+                 * 无法解释这一点，否则我们将永远不会退出循环。
                  *
-                 * AOF and Output buffer memory will be freed eventually so
-                 * we only care about memory used by the key space. */
+                 * AOF和输出缓冲内存最终会被释放，所以我们只关心键空间使用的内存。 */
                 delta = (long long) zmalloc_used_memory();
                 latencyStartMonitor(eviction_latency);
                 dbDelete(db,keyobj);
                 latencyEndMonitor(eviction_latency);
                 latencyAddSampleIfNeeded("eviction-del",eviction_latency);
                 latencyRemoveNestedEvent(latency,eviction_latency);
-                delta -= (long long) zmalloc_used_memory();
+                delta -= (long long) zmalloc_used_memory();         // 计算存储差值，delta即为本次释放内存的大小
                 mem_freed += delta;
-                server.stat_evictedkeys++;
+                server.stat_evictedkeys++;          // 更新统计量
                 notifyKeyspaceEvent(REDIS_NOTIFY_EVICTED, "evicted",
                     keyobj, db->id);
                 decrRefCount(keyobj);

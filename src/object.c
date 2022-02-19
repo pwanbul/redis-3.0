@@ -36,6 +36,7 @@
 #define strtold(a,b) ((long double)strtod((a),(b)))
 #endif
 
+// 创建robj对象
 robj *createObject(int type, void *ptr) {
     robj *o = zmalloc(sizeof(*o));
     o->type = type;
@@ -43,7 +44,7 @@ robj *createObject(int type, void *ptr) {
     o->ptr = ptr;
     o->refcount = 1;
 
-    /* Set the LRU to the current lruclock (minutes resolution). */
+    /* 将LRU设置为当前的lruclock（分钟分辨率）。 */
     o->lru = LRU_CLOCK();
     return o;
 }
@@ -689,13 +690,13 @@ char *strEncoding(int encoding) {
     }
 }
 
-/* Given an object returns the min number of milliseconds the object was never
- * requested, using an approximated LRU algorithm. */
+/* 给定一个对象，使用近似的LRU算法返回该对象子最近一次被请求的最小毫秒数。 */
 unsigned long long estimateObjectIdleTime(robj *o) {
     unsigned long long lruclock = LRU_CLOCK();
     if (lruclock >= o->lru) {
         return (lruclock - o->lru) * REDIS_LRU_CLOCK_RESOLUTION;
     } else {
+        // 处理反绕
         return (lruclock + (REDIS_LRU_CLOCK_MAX - o->lru)) *
                     REDIS_LRU_CLOCK_RESOLUTION;
     }
@@ -717,20 +718,23 @@ robj *objectCommandLookupOrReply(redisClient *c, robj *key, robj *reply) {
     return o;
 }
 
-/* Object command allows to inspect the internals of an Redis Object.
- * Usage: OBJECT <refcount|encoding|idletime> <key> */
+/* Object命令允许检查Redis对象的内部。
+ * 用法: OBJECT <refcount|encoding|idletime> <key> */
 void objectCommand(redisClient *c) {
     robj *o;
 
     if (!strcasecmp(c->argv[1]->ptr,"refcount") && c->argc == 3) {
+        // 对象的引用计数
         if ((o = objectCommandLookupOrReply(c,c->argv[2],shared.nullbulk))
                 == NULL) return;
         addReplyLongLong(c,o->refcount);
     } else if (!strcasecmp(c->argv[1]->ptr,"encoding") && c->argc == 3) {
+        // 显现该对象使用的数据结构
         if ((o = objectCommandLookupOrReply(c,c->argv[2],shared.nullbulk))
                 == NULL) return;
         addReplyBulkCString(c,strEncoding(o->encoding));
     } else if (!strcasecmp(c->argv[1]->ptr,"idletime") && c->argc == 3) {
+        // 返回该对象子最近一次被请求的秒数
         if ((o = objectCommandLookupOrReply(c,c->argv[2],shared.nullbulk))
                 == NULL) return;
         addReplyLongLong(c,estimateObjectIdleTime(o)/1000);
