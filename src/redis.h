@@ -151,9 +151,8 @@ typedef long long mstime_t; /* millisecond time type. */
 #define REDIS_MBULK_BIG_ARG     (1024*32)
 #define REDIS_LONGSTR_SIZE      21          /* Bytes needed for long -> str */
 #define REDIS_AOF_AUTOSYNC_BYTES (1024*1024*32) /* fdatasync every 32MB */
-/* When configuring the Redis eventloop, we setup it so that the total number
- * of file descriptors we can handle are server.maxclients + RESERVED_FDS + FDSET_INCR
- * that is our safety margin. */
+/* 在配置 Redis 事件循环时，我们设置它以便我们可以处理的文件描述符总数是
+ * server.maxclients+RESERVED_FDS+FDSET_INCR，这是我们的安全边际。 */
 #define REDIS_EVENTLOOP_FDSET_INCR (REDIS_MIN_RESERVED_FDS+96)
 
 /* Hash table parameters */
@@ -355,7 +354,7 @@ typedef long long mstime_t; /* millisecond time type. */
                                        points are configured. */
 #define REDIS_SHUTDOWN_NOSAVE 2     /* Don't SAVE on SHUTDOWN. */
 
-/* Command call flags, see call() function */
+/* 命令调用标志，见call()函数 */
 #define REDIS_CALL_NONE 0
 #define REDIS_CALL_SLOWLOG 1
 #define REDIS_CALL_STATS 2
@@ -524,9 +523,9 @@ typedef struct redisClient {
     robj *name;             /* As set by CLIENT SETNAME */
     sds querybuf;
     size_t querybuf_peak;   /* Recent (100ms or more) peak of querybuf size */
-    int argc;
-    robj **argv;
-    struct redisCommand *cmd, *lastcmd;
+    int argc;               /* 命令行参数个数 */
+    robj **argv;            /* 命令行参数 */
+    struct redisCommand *cmd, *lastcmd;         // 当前要执行的命令对象
     int reqtype;
     int multibulklen;       /* number of multi bulk arguments left to read */
     long bulklen;           /* length of bulk argument in multi bulk request */
@@ -659,8 +658,8 @@ struct redisServer {
     char *configfile;           /* Absolute config file path, or NULL */
     int hz;                     /* serverCron() 以赫兹为单位调用频率 */
     redisDb *db;                /* 数据库链表(keyspace) */
-    dict *commands;             /* Command table */
-    dict *orig_commands;        /* Command table before command renaming. */
+    dict *commands;             /* 命令表，key为命令名称(sds类型)，val为redisCommand*(指向静态的命令表中定义) */
+    dict *orig_commands;        /* 命令重命名前的命令表。初始化时和commands中的一样 */
     aeEventLoop *el;
     unsigned lruclock:REDIS_LRU_BITS; /* LRU驱逐的时钟 */
     int shutdown_asap;          /* SHUTDOWN needed ASAP */
@@ -921,20 +920,19 @@ typedef struct pubsubPattern {
 
 typedef void redisCommandProc(redisClient *c);
 typedef int *redisGetKeysProc(struct redisCommand *cmd, robj **argv, int argc, int *numkeys);
+/* redis命令 */
 struct redisCommand {
-    char *name;
-    redisCommandProc *proc;
-    int arity;
-    char *sflags; /* Flags as string representation, one char per flag. */
-    int flags;    /* The actual flags, obtained from the 'sflags' field. */
-    /* Use a function to determine keys arguments in a command line.
-     * Used for Redis Cluster redirect. */
+    char *name;             // 命令名称
+    redisCommandProc *proc;         // 命令实现函数
+    int arity;          // 参数数量，如果为-N则表示>=N
+    char *sflags; /* 标志为字符串表示，每个标志一个字符。 */
+    int flags;    /* 实际的标志，从 'sflags' 字段中获得。使用函数来确定命令行中的键参数。用于Redis集群重定向。 */
     redisGetKeysProc *getkeys_proc;
     /* What keys should be loaded in background when calling this command? */
     int firstkey; /* The first argument that's a key (0 = no keys) */
     int lastkey;  /* The last argument that's a key */
     int keystep;  /* The step between first and last key */
-    long long microseconds, calls;
+    long long microseconds, calls;          // 统计量
 };
 
 struct redisFunctionSym {

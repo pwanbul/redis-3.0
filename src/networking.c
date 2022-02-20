@@ -64,10 +64,9 @@ int listMatchObjects(void *a, void *b) {
 redisClient *createClient(int fd) {
     redisClient *c = zmalloc(sizeof(redisClient));
 
-    /* passing -1 as fd it is possible to create a non connected client.
-     * This is useful since all the Redis commands needs to be executed
-     * in the context of a client. When commands are executed in other
-     * contexts (for instance a Lua script) we need a non connected client. */
+    /* 将-1作为fd传递，可以创建未连接的客户端。
+     * T他很有用，因为所有Redis命令都需要在客户端的上下文中执行。
+     * 当命令在其他上下文（例如Lua脚本）中执行时，我们需要一个未连接的客户端。 */
     if (fd != -1) {
         anetNonBlock(NULL,fd);
         anetEnableTcpNoDelay(NULL,fd);
@@ -952,7 +951,7 @@ int processInlineBuffer(redisClient *c) {
     /* Leave data after the first line of the query in the buffer */
     sdsrange(c->querybuf,querylen+2,-1);
 
-    /* Setup argv array on client structure */
+    /* 在客户端结构上设置argv数组 */
     if (argc) {
         if (c->argv) zfree(c->argv);
         c->argv = zmalloc(sizeof(robj*)*argc);

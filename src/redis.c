@@ -72,20 +72,19 @@ struct redisServer server; /* server global state */
  *
  * Every entry is composed of the following fields:
  *
- * name: a string representing the command name.
- * function: pointer to the C function implementing the command.
- * arity: number of arguments, it is possible to use -N to say >= N
- * sflags: command flags as string. See below for a table of flags.
- * flags: flags as bitmask. Computed by Redis using the 'sflags' field.
+ * name: 表示命令名称的字符串。
+ * function: 指向实现该命令的C函数的指针。
+ * arity: 参数数量，可以使用-N表示>=N
+ * sflags: 命令标志为字符串。请参阅下面的标志表。
+ * flags: 标志为位掩码。由Redis使用'sflags'字段计算。
  * get_keys_proc: an optional function to get key arguments from a command.
  *                This is only used when the following three fields are not
  *                enough to specify what arguments are keys.
- * first_key_index: first argument that is a key
- * last_key_index: last argument that is a key
- * key_step: step to get all the keys from first to last argument. For instance
- *           in MSET the step is two since arguments are key,val,key,val,...
- * microseconds: microseconds of total execution time for this command.
- * calls: total number of calls of this command.
+ * first_key_index: 第一个参数是关键
+ * last_key_index: 最后一个参数是关键
+ * key_step: 步骤以获取从第一个参数到最后一个参数的所有键。例如，在MSET中，步骤是两个，因为参数是key,val,key,val,...
+ * microseconds: 此命令的总执行时间的微秒。
+ * calls: 该命令的总调用次数。
  *
  * The flags, microseconds and calls fields are computed by Redis and should
  * always be set to zero.
@@ -1232,7 +1231,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     }
 
     server.cronloops++;
-    return 1000/server.hz;
+    return 1000/server.hz;          // 每100ms执行一次
 }
 
 /* This function gets called every time Redis is entering the
@@ -1506,7 +1505,7 @@ void initServerConfig(void) {
      * redis.conf using the rename-command directive. */
     server.commands = dictCreate(&commandTableDictType,NULL);
     server.orig_commands = dictCreate(&commandTableDictType,NULL);
-    populateCommandTable();
+    populateCommandTable();             // 初始化服务器的命令表
     server.delCommand = lookupCommandByCString("del");
     server.multiCommand = lookupCommandByCString("multi");
     server.lpushCommand = lookupCommandByCString("lpush");
@@ -1748,7 +1747,7 @@ void initServer(void) {
 
     createSharedObjects();
     adjustOpenFilesLimit();
-    // 事件循环
+    // 创建事件循环
     server.el = aeCreateEventLoop(server.maxclients+REDIS_EVENTLOOP_FDSET_INCR);
     server.db = zmalloc(sizeof(redisDb)*server.dbnum);
 
@@ -1863,17 +1862,17 @@ void initServer(void) {
     bioInit();      // 初始化后台线程，目前只有2个
 }
 
-/* Populates the Redis Command Table starting from the hard coded list
- * we have on top of redis.c file. */
+/* 从我们在redis.c文件顶部的硬编码列表开始填充Redis命令表。 */
 void populateCommandTable(void) {
     int j;
-    int numcommands = sizeof(redisCommandTable)/sizeof(struct redisCommand);
+    int numcommands = sizeof(redisCommandTable)/sizeof(struct redisCommand);        // 命令数量
 
     for (j = 0; j < numcommands; j++) {
         struct redisCommand *c = redisCommandTable+j;
         char *f = c->sflags;
         int retval1, retval2;
 
+        // 按照sflags中的参数，设置flags位图
         while(*f != '\0') {
             switch(*f) {
             case 'w': c->flags |= REDIS_CMD_WRITE; break;
@@ -2013,13 +2012,12 @@ void forceCommandPropagation(redisClient *c, int flags) {
     if (flags & REDIS_PROPAGATE_AOF) c->flags |= REDIS_FORCE_AOF;
 }
 
-/* Call() is the core of Redis execution of a command */
+/* call()是Redis执行命令的核心 */
 void call(redisClient *c, int flags) {
     long long dirty, start, duration;
     int client_old_flags = c->flags;
 
-    /* Sent the command to clients in MONITOR mode, only if the commands are
-     * not generated from reading an AOF. */
+    /* 仅当命令不是通过读取AOF生成时，才以MONITOR模式向客户端发送命令。 */
     if (listLength(server.monitors) &&
         !server.loading &&
         !(c->cmd->flags & (REDIS_CMD_SKIP_MONITOR|REDIS_CMD_ADMIN)))
@@ -2032,7 +2030,7 @@ void call(redisClient *c, int flags) {
     redisOpArrayInit(&server.also_propagate);
     dirty = server.dirty;
     start = ustime();
-    c->cmd->proc(c);
+    c->cmd->proc(c);            // 执行命令
     duration = ustime()-start;
     dirty = server.dirty-dirty;
     if (dirty < 0) dirty = 0;
@@ -2097,42 +2095,35 @@ void call(redisClient *c, int flags) {
     server.stat_numcommands++;
 }
 
-/* If this function gets called we already read a whole
- * command, arguments are in the client argv/argc fields.
- * processCommand() execute the command or prepare the
- * server for a bulk read from the client.
+/* 如果调用此函数，我们已经读取了整个命令，参数位于客户端 argv/argc 字段中。
+ * processCommand()执行命令或准备服务器以从客户端进行批量读取。
  *
- * If 1 is returned the client is still alive and valid and
- * other operations can be performed by the caller. Otherwise
- * if 0 is returned the client was destroyed (i.e. after QUIT). */
+ * 如果返回1，则客户端仍然活着且有效，调用者可以执行其他操作。
+ * 否则，如果返回0，则客户端被销毁（即在QUIT之后）。*/
 int processCommand(redisClient *c) {
-    /* The QUIT command is handled separately. Normal command procs will
-     * go through checking for replication and QUIT will cause trouble
-     * when FORCE_REPLICATION is enabled and would be implemented in
-     * a regular command proc. */
+    /* QUIT命令单独处理。正常的命令过程将检查复制，
+     * 当启用FORCE_REPLICATION时QUIT将导致问题，
+     * 并将在常规命令过程中实现。
+     * */
     if (!strcasecmp(c->argv[0]->ptr,"quit")) {
         addReply(c,shared.ok);
         c->flags |= REDIS_CLOSE_AFTER_REPLY;
         return REDIS_ERR;
     }
 
-    /* Now lookup the command and check ASAP about trivial error conditions
-     * such as wrong arity, bad command name and so forth. */
+    /* 现在查找命令并尽快检查琐碎的错误情况，例如错误的数量、错误的命令名称等。 */
     c->cmd = c->lastcmd = lookupCommand(c->argv[0]->ptr);
     if (!c->cmd) {
-        flagTransaction(c);
-        addReplyErrorFormat(c,"unknown command '%s'",
-            (char*)c->argv[0]->ptr);
+        flagTransaction(c);         // 若处在事务中，则exec时，拒绝执行事务
+        addReplyErrorFormat(c,"unknown command '%s'", (char*)c->argv[0]->ptr);
         return REDIS_OK;
-    } else if ((c->cmd->arity > 0 && c->cmd->arity != c->argc) ||
-               (c->argc < -c->cmd->arity)) {
+    } else if ((c->cmd->arity > 0 && c->cmd->arity != c->argc) || (c->argc < -c->cmd->arity)) {
         flagTransaction(c);
-        addReplyErrorFormat(c,"wrong number of arguments for '%s' command",
-            c->cmd->name);
+        addReplyErrorFormat(c,"wrong number of arguments for '%s' command", c->cmd->name);
         return REDIS_OK;
     }
 
-    /* Check if the user is authenticated */
+    /* 检查用户是否通过身份验证 */
     if (server.requirepass && !c->authenticated && c->cmd->proc != authCommand)
     {
         flagTransaction(c);
@@ -2269,15 +2260,17 @@ int processCommand(redisClient *c) {
         return REDIS_OK;
     }
 
-    /* Exec the command */
+    /* 如果已经开始事务multi，那么exec,discard,multi,watch将会立即执行
+     * 其他的命令将会进入队列中。
+     * */
     if (c->flags & REDIS_MULTI &&
         c->cmd->proc != execCommand && c->cmd->proc != discardCommand &&
         c->cmd->proc != multiCommand && c->cmd->proc != watchCommand)
     {
-        queueMultiCommand(c);
+        queueMultiCommand(c);           // 进入队列中
         addReply(c,shared.queued);
     } else {
-        call(c,REDIS_CALL_FULL);
+        call(c,REDIS_CALL_FULL);        // 立即执行
         c->woff = server.master_repl_offset;
         if (listLength(server.ready_keys))
             handleClientsBlockedOnLists();
@@ -3534,7 +3527,7 @@ void redisSetProcTitle(char *title) {
 #endif
 }
 
-// redis-server entry point
+// 服务器main函数
 int main(int argc, char **argv) {
     struct timeval tv;
 
@@ -3649,7 +3642,7 @@ int main(int argc, char **argv) {
     }
 
     aeSetBeforeSleepProc(server.el,beforeSleep);
-    aeMain(server.el);
+    aeMain(server.el);              // 死循环，除非QUIT等原因
     aeDeleteEventLoop(server.el);
     return 0;
 }

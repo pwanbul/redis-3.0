@@ -31,11 +31,14 @@
 
 #include <sys/epoll.h>
 
+// 基于epoll
+
 typedef struct aeApiState {
     int epfd;
-    struct epoll_event *events;
+    struct epoll_event *events;     // epoll_wait中使用
 } aeApiState;
 
+// 创建apiState
 static int aeApiCreate(aeEventLoop *eventLoop) {
     aeApiState *state = zmalloc(sizeof(aeApiState));
 
@@ -70,11 +73,27 @@ static void aeApiFree(aeEventLoop *eventLoop) {
     zfree(state);
 }
 
+/*
+ * typedef union epoll_data {
+       void        *ptr;
+       int          fd;
+       uint32_t     u32;
+       uint64_t     u64;
+   } epoll_data_t;
+
+   struct epoll_event {
+        uint32_t     events;      // Epoll events
+        epoll_data_t data;        // User data variable
+    };
+ *
+ * */
+
+/* 加入apiState */
 static int aeApiAddEvent(aeEventLoop *eventLoop, int fd, int mask) {
     aeApiState *state = eventLoop->apidata;
     struct epoll_event ee;
-    /* If the fd was already monitored for some event, we need a MOD
-     * operation. Otherwise we need an ADD operation. */
+    /* 如果fd已经被监视某些事件，我们需要一个MOD操作。
+     * 否则我们需要一个ADD操作。 */
     int op = eventLoop->events[fd].mask == AE_NONE ?
             EPOLL_CTL_ADD : EPOLL_CTL_MOD;
 
@@ -88,6 +107,7 @@ static int aeApiAddEvent(aeEventLoop *eventLoop, int fd, int mask) {
     return 0;
 }
 
+/* 删除apiState */
 static void aeApiDelEvent(aeEventLoop *eventLoop, int fd, int delmask) {
     aeApiState *state = eventLoop->apidata;
     struct epoll_event ee;
@@ -107,6 +127,7 @@ static void aeApiDelEvent(aeEventLoop *eventLoop, int fd, int delmask) {
     }
 }
 
+/* 轮询apiState */
 static int aeApiPoll(aeEventLoop *eventLoop, struct timeval *tvp) {
     aeApiState *state = eventLoop->apidata;
     int retval, numevents = 0;

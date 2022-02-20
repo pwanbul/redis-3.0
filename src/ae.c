@@ -44,8 +44,7 @@
 #include "zmalloc.h"
 #include "config.h"
 
-/* Include the best multiplexing layer supported by this system.
- * The following should be ordered by performances, descending. */
+/* 包括该系统支持的最佳多路复用层。以下应按表演顺序，降序排列。 */
 #ifdef HAVE_EVPORT
 #include "ae_evport.c"
 #else
@@ -60,14 +59,19 @@
     #endif
 #endif
 
+/* 创建事件轮询
+ * setsize = 10000 + 128
+ * */
 aeEventLoop *aeCreateEventLoop(int setsize) {
     aeEventLoop *eventLoop;
     int i;
 
+    // 分配相关数据结构内存
     if ((eventLoop = zmalloc(sizeof(*eventLoop))) == NULL) goto err;
     eventLoop->events = zmalloc(sizeof(aeFileEvent)*setsize);
     eventLoop->fired = zmalloc(sizeof(aeFiredEvent)*setsize);
     if (eventLoop->events == NULL || eventLoop->fired == NULL) goto err;
+
     eventLoop->setsize = setsize;
     eventLoop->lastTime = time(NULL);
     eventLoop->timeEventHead = NULL;
@@ -75,9 +79,10 @@ aeEventLoop *aeCreateEventLoop(int setsize) {
     eventLoop->stop = 0;
     eventLoop->maxfd = -1;
     eventLoop->beforesleep = NULL;
+
+    // 创建某种多路IO复用，aeApiCreate是封装后的同一接口
     if (aeApiCreate(eventLoop) == -1) goto err;
-    /* Events with mask == AE_NONE are not set. So let's initialize the
-     * vector with it. */
+    /* 没有设置掩码==AE_NONE的事件。所以让我们用它初始化向量. */
     for (i = 0; i < setsize; i++)
         eventLoop->events[i].mask = AE_NONE;
     return eventLoop;
@@ -132,9 +137,11 @@ void aeStop(aeEventLoop *eventLoop) {
     eventLoop->stop = 1;
 }
 
+/* 创建文件事件 */
 int aeCreateFileEvent(aeEventLoop *eventLoop, int fd, int mask,
         aeFileProc *proc, void *clientData)
 {
+    /* eventLoop->events数组的下标即为fd，因此Redis只能在完全符合POSIX标准的系统中工作 */
     if (fd >= eventLoop->setsize) {
         errno = ERANGE;
         return AE_ERR;
@@ -148,10 +155,11 @@ int aeCreateFileEvent(aeEventLoop *eventLoop, int fd, int mask,
     if (mask & AE_WRITABLE) fe->wfileProc = proc;
     fe->clientData = clientData;
     if (fd > eventLoop->maxfd)
-        eventLoop->maxfd = fd;
+        eventLoop->maxfd = fd;          // 更新最大fd
     return AE_OK;
 }
 
+/* 删除文件事件 */
 void aeDeleteFileEvent(aeEventLoop *eventLoop, int fd, int mask)
 {
     if (fd >= eventLoop->setsize) return;
@@ -170,6 +178,7 @@ void aeDeleteFileEvent(aeEventLoop *eventLoop, int fd, int mask)
     }
 }
 
+/* 获取文件事件 */
 int aeGetFileEvents(aeEventLoop *eventLoop, int fd) {
     if (fd >= eventLoop->setsize) return 0;
     aeFileEvent *fe = &eventLoop->events[fd];
@@ -177,6 +186,7 @@ int aeGetFileEvents(aeEventLoop *eventLoop, int fd) {
     return fe->mask;
 }
 
+/* 获取当前系统的时间，秒和距离上一秒的毫秒级偏移量 */
 static void aeGetTime(long *seconds, long *milliseconds)
 {
     struct timeval tv;
@@ -200,12 +210,12 @@ static void aeAddMillisecondsToNow(long long milliseconds, long *sec, long *ms) 
     *ms = when_ms;
 }
 
-/* 定时器 */
+/* 创建定时器 */
 long long aeCreateTimeEvent(aeEventLoop *eventLoop, long long milliseconds,
         aeTimeProc *proc, void *clientData,
         aeEventFinalizerProc *finalizerProc)
 {
-    long long id = eventLoop->timeEventNextId++;
+    long long id = eventLoop->timeEventNextId++;    // 定期器ID
     aeTimeEvent *te;
 
     te = zmalloc(sizeof(*te));
@@ -215,6 +225,7 @@ long long aeCreateTimeEvent(aeEventLoop *eventLoop, long long milliseconds,
     te->timeProc = proc;
     te->finalizerProc = finalizerProc;
     te->clientData = clientData;
+    // 加入链表中
     te->next = eventLoop->timeEventHead;
     eventLoop->timeEventHead = te;
     return id;
@@ -268,7 +279,7 @@ static aeTimeEvent *aeSearchNearestTimer(aeEventLoop *eventLoop)
     return nearest;
 }
 
-/* Process time events */
+/* 处理时间事件 */
 static int processTimeEvents(aeEventLoop *eventLoop) {
     int processed = 0;
     aeTimeEvent *te;
@@ -303,6 +314,7 @@ static int processTimeEvents(aeEventLoop *eventLoop) {
             continue;
         }
         aeGetTime(&now_sec, &now_ms);
+        // 大于等于当前时间
         if (now_sec > te->when_sec ||
             (now_sec == te->when_sec && now_ms >= te->when_ms))
         {
@@ -349,12 +361,12 @@ static int processTimeEvents(aeEventLoop *eventLoop) {
  * if flags has AE_DONT_WAIT set the function returns ASAP until all
  * the events that's possible to process without to wait are processed.
  *
- * The function returns the number of events processed. */
+ * 该函数返回处理的事件数 */
 int aeProcessEvents(aeEventLoop *eventLoop, int flags)
 {
     int processed = 0, numevents;
 
-    /* Nothing to do? return ASAP */
+    /* 没事做？尽快返回 */
     if (!(flags & AE_TIME_EVENTS) && !(flags & AE_FILE_EVENTS)) return 0;
 
     /* Note that we want call select() even if there are no
@@ -367,13 +379,14 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
         aeTimeEvent *shortest = NULL;
         struct timeval tv, *tvp;
 
+        // 先处理时间事件
         if (flags & AE_TIME_EVENTS && !(flags & AE_DONT_WAIT))
+            // 找到最近一个即将超时的定时器
             shortest = aeSearchNearestTimer(eventLoop);
         if (shortest) {
             long now_sec, now_ms;
 
-            /* Calculate the time missing for the nearest
-             * timer to fire. */
+            /* 计算最近的计时器触发的时间。 */
             aeGetTime(&now_sec, &now_ms);
             tvp = &tv;
             tvp->tv_sec = shortest->when_sec - now_sec;
@@ -426,8 +439,7 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
     return processed; /* return the number of processed file/time events */
 }
 
-/* Wait for milliseconds until the given file descriptor becomes
- * writable/readable/exception */
+/* 等待几毫秒，直到给定的文件描述符变为可写可读异常 */
 int aeWait(int fd, int mask, long long milliseconds) {
     struct pollfd pfd;
     int retmask = 0, retval;
@@ -448,6 +460,7 @@ int aeWait(int fd, int mask, long long milliseconds) {
     }
 }
 
+/* redis在这个函数上死循环 */
 void aeMain(aeEventLoop *eventLoop) {
     eventLoop->stop = 0;
     while (!eventLoop->stop) {

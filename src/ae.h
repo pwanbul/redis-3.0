@@ -37,12 +37,12 @@
 #define AE_ERR -1
 
 #define AE_NONE 0
-#define AE_READABLE 1
-#define AE_WRITABLE 2
+#define AE_READABLE 1           // 读事件
+#define AE_WRITABLE 2           // 写事件
 
-#define AE_FILE_EVENTS 1
-#define AE_TIME_EVENTS 2
-#define AE_ALL_EVENTS (AE_FILE_EVENTS|AE_TIME_EVENTS)
+#define AE_FILE_EVENTS 1        // 文件事件
+#define AE_TIME_EVENTS 2        // 时间事件
+#define AE_ALL_EVENTS (AE_FILE_EVENTS|AE_TIME_EVENTS)       // 两者
 #define AE_DONT_WAIT 4
 
 #define AE_NOMORE -1
@@ -58,7 +58,7 @@ typedef int aeTimeProc(struct aeEventLoop *eventLoop, long long id, void *client
 typedef void aeEventFinalizerProc(struct aeEventLoop *eventLoop, void *clientData);
 typedef void aeBeforeSleepProc(struct aeEventLoop *eventLoop);
 
-/* File event structure */
+/* 文件事件结构 */
 typedef struct aeFileEvent {
     int mask; /* one of AE_(READABLE|WRITABLE) */
     aeFileProc *rfileProc;
@@ -66,18 +66,18 @@ typedef struct aeFileEvent {
     void *clientData;
 } aeFileEvent;
 
-/* Time event structure */
+/* 时间事件结构 */
 typedef struct aeTimeEvent {
     long long id; /* time event identifier. */
     long when_sec; /* seconds */
     long when_ms; /* milliseconds */
-    aeTimeProc *timeProc;
+    aeTimeProc *timeProc;       // 超时处理函数
     aeEventFinalizerProc *finalizerProc;
     void *clientData;
-    struct aeTimeEvent *next;
+    struct aeTimeEvent *next;       // 定时器无序链表
 } aeTimeEvent;
 
-/* A fired event */
+/* 触发的事件 */
 typedef struct aeFiredEvent {
     int fd;
     int mask;
@@ -87,11 +87,11 @@ typedef struct aeFiredEvent {
 typedef struct aeEventLoop {
     int maxfd;   /* highest file descriptor currently registered */
     int setsize; /* max number of file descriptors tracked */
-    long long timeEventNextId;
+    long long timeEventNextId;      // 定时器没有fd，所以用自增的ID
     time_t lastTime;     /* Used to detect system clock skew */
-    aeFileEvent *events; /* Registered events */
-    aeFiredEvent *fired; /* Fired events */
-    aeTimeEvent *timeEventHead;
+    aeFileEvent *events; /* 注册事件 */
+    aeFiredEvent *fired; /* 触发事件 */
+    aeTimeEvent *timeEventHead;         // 定时器链表
     int stop;
     void *apidata; /* This is used for polling API specific data */
     aeBeforeSleepProc *beforesleep;
