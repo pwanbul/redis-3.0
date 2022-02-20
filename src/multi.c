@@ -79,7 +79,7 @@ void discardTransaction(redisClient *c) {
 /* 将事务标记为DIRTY_EXEC，以便EXEC失败。
  * 每次在排队命令时出现错误时都应该调用。 */
 void flagTransaction(redisClient *c) {
-    if (c->flags & REDIS_MULTI)
+    if (c->flags & REDIS_MULTI)         // 是否在处在事务中(即是否已经执行multi)？
         c->flags |= REDIS_DIRTY_EXEC;
 }
 
@@ -195,7 +195,7 @@ handle_monitor:
 /* 在client->watched_keys列表中，我们需要使用watchKey结构，
  * 因为为了识别Redis中的键，我们需要键名和数据库
  *
- * 
+ *
  *
  * */
 typedef struct watchedKey {

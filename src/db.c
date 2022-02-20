@@ -110,12 +110,11 @@ void dbOverwrite(redisDb *db, robj *key, robj *val) {
     dictReplace(db->dict, key->ptr, val);
 }
 
-/* High level Set operation. This function can be used in order to set
- * a key, whatever it was existing or not, to a new object.
+/* 高水平设置操作。此函数可用于将键设置为新对象，无论它是否存在。
  *
- * 1) The ref count of the value object is incremented.
- * 2) clients WATCHing for the destination key notified.
- * 3) The expire time of the key is reset (the key is made persistent). */
+ * 1) 值对象的引用计数递增。
+ * 2) 客户端正在watch通知的目标key。
+ * 3) 重置key的过期时间（使密钥持久化）。 */
 void setKey(redisDb *db, robj *key, robj *val) {
     if (lookupKeyWrite(db,key) == NULL) {
         dbAdd(db,key,val);

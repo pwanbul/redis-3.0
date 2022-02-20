@@ -272,7 +272,7 @@ void flushAppendOnlyFile(int force) {
     if (sdslen(server.aof_buf) == 0) return;            // aof_buf缓冲区为0
 
     if (server.aof_fsync == AOF_FSYNC_EVERYSEC)
-        sync_in_progress = bioPendingJobsOfType(REDIS_BIO_AOF_FSYNC) != 0;
+        sync_in_progress = bioPendingJobsOfType(REDIS_BIO_AOF_FSYNC) != 0;        // 队列中有未处理的任务
 
     if (server.aof_fsync == AOF_FSYNC_EVERYSEC && !force) {
         /* With this append fsync policy we do background fsyncing.

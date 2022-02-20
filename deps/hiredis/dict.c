@@ -240,6 +240,7 @@ static void dictRelease(dict *ht) {
     free(ht);
 }
 
+/* 按key查找dictEntry */
 static dictEntry *dictFind(dict *ht, const void *key) {
     dictEntry *he;
     unsigned int h;
