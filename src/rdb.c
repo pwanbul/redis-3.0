@@ -715,7 +715,10 @@ werr: /* Write error. */
     return REDIS_ERR;
 }
 
-/* 将数据库保存在磁盘上。出错时返回 REDIS_ERR，成功时返回 REDIS_OK。 */
+/* 将数据库保存在磁盘上。
+ * 出错时返回REDIS_ERR，成功时返回REDIS_OK。
+ * filename默认dump.rdb
+ * */
 int rdbSave(char *filename) {
     char tmpfile[256];
     FILE *fp;
@@ -802,7 +805,7 @@ int rdbSaveBackground(char *filename) {
         redisLog(REDIS_NOTICE,"Background saving started by pid %d",childpid);
         server.rdb_save_time_start = time(NULL);
         server.rdb_child_pid = childpid;			// 记录子进程pid
-        server.rdb_child_type = REDIS_RDB_CHILD_TYPE_DISK;
+        server.rdb_child_type = REDIS_RDB_CHILD_TYPE_DISK;      // 子进程类型
         updateDictResizePolicy();			// 调整resize负载因子
         return REDIS_OK;
     }
@@ -1264,11 +1267,11 @@ void backgroundSaveDoneHandlerDisk(int exitcode, int bysignal) {
             server.lastbgsave_status = REDIS_ERR;
     }
     server.rdb_child_pid = -1;
-    server.rdb_child_type = REDIS_RDB_CHILD_TYPE_NONE;
+    server.rdb_child_type = REDIS_RDB_CHILD_TYPE_NONE;          // 清除子进程类型
     server.rdb_save_time_last = time(NULL)-server.rdb_save_time_start;
     server.rdb_save_time_start = -1;
-    /* Possibly there are slaves waiting for a BGSAVE in order to be served
-     * (the first stage of SYNC is a bulk transfer of dump.rdb) */
+    /* 可能有从服务器等待BGSAVE以得到服务
+     * （SYNC 的第一阶段是dump.rdb的批量传输） */
     updateSlavesWaitingBgsave((!bysignal && exitcode == 0) ? REDIS_OK : REDIS_ERR, REDIS_RDB_CHILD_TYPE_DISK);
 }
 
@@ -1288,7 +1291,7 @@ void backgroundSaveDoneHandlerSocket(int exitcode, int bysignal) {
             "Background transfer terminated by signal %d", bysignal);
     }
     server.rdb_child_pid = -1;
-    server.rdb_child_type = REDIS_RDB_CHILD_TYPE_NONE;
+    server.rdb_child_type = REDIS_RDB_CHILD_TYPE_NONE;      // 清除子进程类型
     server.rdb_save_time_start = -1;
 
     /* If the child returns an OK exit code, read the set of slave client
@@ -1382,8 +1385,8 @@ void backgroundSaveDoneHandler(int exitcode, int bysignal) {
     }
 }
 
-/* Spawn an RDB child that writes the RDB to the sockets of the slaves
- * that are currently in REDIS_REPL_WAIT_BGSAVE_START state. */
+/* 生成一个将RDB写入当前处于REDIS_REPL_WAIT_BGSAVE_START
+ * 状态的从属设备的套接字的RDB子级. */
 int rdbSaveToSlavesSockets(void) {
     int *fds;
     uint64_t *clientids;
@@ -1512,7 +1515,7 @@ int rdbSaveToSlavesSockets(void) {
         redisLog(REDIS_NOTICE,"Background RDB transfer started by pid %d",childpid);
         server.rdb_save_time_start = time(NULL);
         server.rdb_child_pid = childpid;
-        server.rdb_child_type = REDIS_RDB_CHILD_TYPE_SOCKET;
+        server.rdb_child_type = REDIS_RDB_CHILD_TYPE_SOCKET;        // 子进程类型
         updateDictResizePolicy();
         zfree(fds);
         return REDIS_OK;

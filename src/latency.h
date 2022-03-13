@@ -67,15 +67,14 @@ int THPIsEnabled(void);
 
 /* Latency monitoring macros. */
 
-/* Start monitoring an event. We just set the current time. */
+/* 开始监视事件。我们只是设置了当前时间。 */
 #define latencyStartMonitor(var) if (server.latency_monitor_threshold) { \
     var = mstime(); \
 } else { \
     var = 0; \
 }
 
-/* End monitoring an event, compute the difference with the current time
- * to check the amount of time elapsed. */
+/* 结束监控一个事件，计算与当前时间的差异以检查经过的时间量。 */
 #define latencyEndMonitor(var) if (server.latency_monitor_threshold) { \
     var = mstime() - var; \
 }

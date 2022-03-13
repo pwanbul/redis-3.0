@@ -43,7 +43,7 @@
  *
  * mystring = sdsnewlen("abc",3);
  *
- * 您可以使用 printf() 打印字符串，因为字符串末尾有一个隐含的 \0。
+ * 您可以使用printf()打印字符串，因为字符串末尾有一个隐含的 \0。
  * 然而，字符串是二进制安全的，中间可以包含 \0 字符，因为长度存储在 sds 标头中。
  * */
 sds sdsnewlen(const void *init, size_t initlen) {
@@ -149,12 +149,10 @@ sds sdsMakeRoomFor(sds s, size_t addlen) {
     return newsh->buf;
 }
 
-/* Reallocate the sds string so that it has no free space at the end. The
- * contained string remains not altered, but next concatenation operations
- * will require a reallocation.
+/* 重新分配sds字符串，使其末尾没有可用空间。
+ * 包含的字符串保持不变，但接下来的连接操作将需要重新分配。
  *
- * After the call, the passed sds string is no longer valid and all the
- * references must be substituted with the new pointer returned by the call. */
+ * 调用后，传递的sds字符串不再有效，所有引用必须替换为调用返回的新指针。 */
 sds sdsRemoveFreeSpace(sds s) {
     struct sdshdr *sh;
 

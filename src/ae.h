@@ -91,7 +91,7 @@ typedef struct aeEventLoop {
     time_t lastTime;     /* Used to detect system clock skew */
     aeFileEvent *events; /* 注册事件 */
     aeFiredEvent *fired; /* 触发事件 */
-    aeTimeEvent *timeEventHead;         // 定时器链表
+    aeTimeEvent *timeEventHead;         // 定时器链表头
     int stop;
     void *apidata; /* This is used for polling API specific data */
     aeBeforeSleepProc *beforesleep;

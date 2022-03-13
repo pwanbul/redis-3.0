@@ -238,7 +238,7 @@ typedef long long mstime_t; /* millisecond time type. */
 #define REDIS_UNBLOCKED (1<<7) /* This client was unblocked and is stored in
                                   server.unblocked_clients */
 #define REDIS_LUA_CLIENT (1<<8) /* This is a non connected client used by Lua */
-#define REDIS_ASKING (1<<9)     /* Client issued the ASKING command */
+#define REDIS_ASKING (1<<9)     /* 客户端发出ASKING命令 */
 #define REDIS_CLOSE_ASAP (1<<10)/* Close this client ASAP */
 #define REDIS_UNIX_SOCKET (1<<11) /* Client connected via Unix domain socket */
 #define REDIS_DIRTY_EXEC (1<<12)  /* 排队时EXEC将因错误而失败 */
@@ -388,9 +388,8 @@ typedef long long mstime_t; /* millisecond time type. */
 /* Get the first bind addr or NULL */
 #define REDIS_BIND_ADDR (server.bindaddr_count ? server.bindaddr[0] : NULL)
 
-/* Using the following macro you can run code inside serverCron() with the
- * specified period, specified in milliseconds.
- * The actual resolution depends on server.hz. */
+/* 使用以下宏，您可以在serverCron()中以指定的时间段
+ * （以毫秒为单位）运行代码。实际分辨率取决于server.hz. */
 #define run_with_period(_ms_) if ((_ms_ <= 1000/server.hz) || !(server.cronloops%((_ms_)/(1000/server.hz))))
 
 /* We can print the stacktrace, so our assert is defined this way: */
@@ -677,8 +676,8 @@ struct redisServer {
     int bindaddr_count;         /* Number of addresses in server.bindaddr[] */
     char *unixsocket;           /* UNIX socket path */
     mode_t unixsocketperm;      /* UNIX socket permission */
-    int ipfd[REDIS_BINDADDR_MAX]; /* TCP socket file descriptors */
-    int ipfd_count;             /* Used slots in ipfd[] */
+    int ipfd[REDIS_BINDADDR_MAX]; /* TCP套接字文件描述符 */
+    int ipfd_count;             /* ipfd[]中使用的插槽的数量 */
     int sofd;                   /* Unix socket file descriptor */
     int cfd[REDIS_BINDADDR_MAX];/* Cluster bus listening socket */
     int cfd_count;              /* Used slots in cfd[] */
@@ -820,7 +819,7 @@ struct redisServer {
     int repl_diskless_sync_delay;   /* Delay to start a diskless repl BGSAVE. */
     /* Replication (slave) */
     char *masterauth;               /* AUTH with this password with master */
-    char *masterhost;               /* Hostname of master */
+    char *masterhost;               /* 主机名，非空表示工作在主从复制模式下的slave */
     int masterport;                 /* Port of master */
     int repl_timeout;               /* Timeout after N seconds of master idle */
     redisClient *master;     /* Client that is master for this slave */
@@ -880,10 +879,10 @@ struct redisServer {
     int notify_keyspace_events; /* Events to propagate via Pub/Sub. This is an
                                    xor of REDIS_NOTIFY... flags. */
     /* Cluster */
-    int cluster_enabled;      /* Is cluster enabled? */
+    int cluster_enabled;      /* 是否启用集群？读配置决定 */
     mstime_t cluster_node_timeout; /* Cluster node timeout. */
     char *cluster_configfile; /* Cluster auto-generated config file name. */
-    struct clusterState *cluster;  /* State of the cluster */
+    struct clusterState *cluster;  /* 集群状态 */
     int cluster_migration_barrier; /* Cluster replicas migration barrier. */
     int cluster_slave_validity_factor; /* Slave max data age for failover. */
     int cluster_require_full_coverage; /* If true, put the cluster down if
@@ -894,7 +893,7 @@ struct redisServer {
     redisClient *lua_caller;   /* The client running EVAL right now, or NULL */
     dict *lua_scripts;         /* A dictionary of SHA1 -> Lua scripts */
     mstime_t lua_time_limit;  /* Script timeout in milliseconds */
-    mstime_t lua_time_start;  /* Start time of script, milliseconds time */
+    mstime_t lua_time_start;  /* 脚本开始时间，毫秒时间 */
     int lua_write_dirty;  /* True if a write command was called during the
                              execution of the current script. */
     int lua_random_dirty; /* True if a random command was called during the

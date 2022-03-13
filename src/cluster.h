@@ -2,13 +2,13 @@
 #define __REDIS_CLUSTER_H
 
 /*-----------------------------------------------------------------------------
- * Redis cluster data structures, defines, exported API.
+ * Redis 集群数据结构、定义、导出API。
  *----------------------------------------------------------------------------*/
 
-#define REDIS_CLUSTER_SLOTS 16384
-#define REDIS_CLUSTER_OK 0          /* Everything looks ok */
-#define REDIS_CLUSTER_FAIL 1        /* The cluster can't work */
-#define REDIS_CLUSTER_NAMELEN 40    /* sha1 hex length */
+#define REDIS_CLUSTER_SLOTS 16384       /* 槽空间大小，2^14 */
+#define REDIS_CLUSTER_OK 0          /* 集群节点在线 */
+#define REDIS_CLUSTER_FAIL 1        /* 集群节点离线 */
+#define REDIS_CLUSTER_NAMELEN 40    /* 集群节点名称长度 */
 #define REDIS_CLUSTER_PORT_INCR 10000 /* Cluster port = baseport + PORT_INCR */
 
 /* The following defines are amount of time, sometimes expressed as
@@ -35,7 +35,7 @@
 
 struct clusterNode;
 
-/* clusterLink encapsulates everything needed to talk with a remote node. */
+/* clusterLink封装了与远程节点通信所需的一切。 */
 typedef struct clusterLink {
     mstime_t ctime;             /* Link creation time */
     int fd;                     /* TCP socket file descriptor */
@@ -44,11 +44,11 @@ typedef struct clusterLink {
     struct clusterNode *node;   /* Node related to this link if any, or NULL */
 } clusterLink;
 
-/* Cluster node flags and macros. */
-#define REDIS_NODE_MASTER 1     /* The node is a master */
-#define REDIS_NODE_SLAVE 2      /* The node is a slave */
-#define REDIS_NODE_PFAIL 4      /* Failure? Need acknowledge */
-#define REDIS_NODE_FAIL 8       /* The node is believed to be malfunctioning */
+/* 集群节点标志和宏。 */
+#define REDIS_NODE_MASTER 1     /* 该节点是主节点 */
+#define REDIS_NODE_SLAVE 2      /* 该节点是一个从节点 */
+#define REDIS_NODE_PFAIL 4      /* 疑似离线*/
+#define REDIS_NODE_FAIL 8       /* 真正离线 */
 #define REDIS_NODE_MYSELF 16    /* This node is myself */
 #define REDIS_NODE_HANDSHAKE 32 /* We have still to exchange the first ping */
 #define REDIS_NODE_NOADDR   64  /* We don't know the address of this node */
@@ -72,45 +72,49 @@ typedef struct clusterLink {
 #define REDIS_CLUSTER_CANT_FAILOVER_WAITING_VOTES 4
 #define REDIS_CLUSTER_CANT_FAILOVER_RELOG_PERIOD (60*5) /* seconds. */
 
-/* This structure represent elements of node->fail_reports. */
+/* 此结构表示node->fail_reports的元素. */
 typedef struct clusterNodeFailReport {
     struct clusterNode *node;  /* Node reporting the failure condition. */
-    mstime_t time;             /* Time of the last report from this node. */
+    mstime_t time;             /* 此节点的最后一次报告的时间。 */
 } clusterNodeFailReport;
 
+/* 集群中的节点的描述符 */
 typedef struct clusterNode {
-    mstime_t ctime; /* Node object creation time. */
-    char name[REDIS_CLUSTER_NAMELEN]; /* Node name, hex string, sha1-size */
+    mstime_t ctime; /* 节点对象创建时间. */
+    char name[REDIS_CLUSTER_NAMELEN]; /* 节点名称，十六进制字符串，sha1-size */
     int flags;      /* REDIS_NODE_... */
-    uint64_t configEpoch; /* Last configEpoch observed for this node */
-    unsigned char slots[REDIS_CLUSTER_SLOTS/8]; /* slots handled by this node */
-    int numslots;   /* Number of slots handled by this node */
-    int numslaves;  /* Number of slave nodes, if this is a master */
-    struct clusterNode **slaves; /* pointers to slave nodes */
-    struct clusterNode *slaveof; /* pointer to the master node */
+    uint64_t configEpoch; /* 观察到此节点的最后一个configEpoch，用于实现故障转移 */
+    unsigned char slots[REDIS_CLUSTER_SLOTS/8]; /* 此节点处理的槽，位图 */
+    int numslots;   /* 此节点处理的槽数 */
+    int numslaves;  /* 从节点的数量，如果这是主节点 */
+    struct clusterNode **slaves; /* 指向从节点的指针，如果这是主节点，可以有多个从节点，因此用数组保存 */
+    struct clusterNode *slaveof; /* 指向主节点的指针 */
     mstime_t ping_sent;      /* Unix time we sent latest ping */
     mstime_t pong_received;  /* Unix time we received the pong */
     mstime_t fail_time;      /* Unix time when FAIL flag was set */
     mstime_t voted_time;     /* Last time we voted for a slave of this master */
     mstime_t repl_offset_time;  /* Unix time we received offset for this node */
     long long repl_offset;      /* Last known repl offset for this node. */
-    char ip[REDIS_IP_STR_LEN];  /* Latest known IP address of this node */
-    int port;                   /* Latest known port of this node */
-    clusterLink *link;          /* TCP/IP link with this node */
-    list *fail_reports;         /* List of nodes signaling this as failing */
+    char ip[REDIS_IP_STR_LEN];  /* 此节点的最新已知IP地址 */
+    int port;                   /* 此节点的最新已知端口 */
+    clusterLink *link;          /* 与该节点的TCP/IP链接 */
+    list *fail_reports;         /* 离线节点的列表，clusterNodeFailReport* */
 } clusterNode;
 
+/* 集群节点的状态 */
 typedef struct clusterState {
-    clusterNode *myself;  /* This node */
-    uint64_t currentEpoch;
+    clusterNode *myself;  /* 当前服务器的集群节点描述符 */
+    uint64_t currentEpoch; /* 观察到此节点的最后一个configEpoch，用于实现故障转移 */
     int state;            /* REDIS_CLUSTER_OK, REDIS_CLUSTER_FAIL, ... */
     int size;             /* Num of master nodes with at least one slot */
-    dict *nodes;          /* Hash table of name -> clusterNode structures */
+    dict *nodes;          /* 哈希表：节点名称->clusterNode结构 */
     dict *nodes_black_list; /* Nodes we don't re-add for a few seconds. */
+    /* 迁出，将本节点上槽i中的数据迁移到migrating_slots_to[i]节点中 */
     clusterNode *migrating_slots_to[REDIS_CLUSTER_SLOTS];
+    /* 导入，将importing_slots_from[i]节点上槽i中的数据导入本节点 */
     clusterNode *importing_slots_from[REDIS_CLUSTER_SLOTS];
-    clusterNode *slots[REDIS_CLUSTER_SLOTS];
-    zskiplist *slots_to_keys;
+    clusterNode *slots[REDIS_CLUSTER_SLOTS];        /* 槽ID->clusterNode */
+    zskiplist *slots_to_keys;       /* 只能使用db0，不能切换， 保存槽ID(分数)和key */
     /* The following fields are used to take the slave state on elections. */
     mstime_t failover_auth_time; /* Time of previous or next election. */
     int failover_auth_count;    /* Number of votes received so far. */

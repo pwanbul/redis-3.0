@@ -42,8 +42,8 @@ typedef char *sds;
  * 实现string，AOF缓冲区，客户端状态中的输入缓存区
  * */
 struct sdshdr {
-    unsigned int len;		// buff中字符串的长度，不含'\0'
-    unsigned int free;		// buff中未使用的空间
+    unsigned int len;		// buf中字符串的长度，不含'\0'
+    unsigned int free;		// buf中未使用的空间
     char buf[];				// 字节数组，数组中间可以出现'\0'，并以'\0'结尾以兼容c函数
 };
 

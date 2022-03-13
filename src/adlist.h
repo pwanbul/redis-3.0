@@ -49,7 +49,7 @@ typedef struct listIter {
     int direction;      // 方向
 } listIter;
 
-// 链表头
+// 链表头，双向不循环
 typedef struct list {
     listNode *head;         // 指向链表中第一个节点
     listNode *tail;         // 指向链表中最后一个节点

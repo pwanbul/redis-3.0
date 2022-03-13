@@ -918,7 +918,7 @@ static int _dictExpandIfNeeded(dict *d)
         (dict_can_resize ||
          d->ht[0].used/d->ht[0].size > dict_force_resize_ratio))
     {
-        return dictExpand(d, d->ht[0].used*2);
+        return dictExpand(d, d->ht[0].used*2);          // 节点数的2倍，向上对齐
     }
     return DICT_OK;
 }

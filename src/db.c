@@ -46,11 +46,11 @@ robj *lookupKey(redisDb *db, robj *key) {
     if (de) {
         robj *val = dictGetVal(de);
 
-        /* Update the access time for the ageing algorithm.
-         * Don't do it if we have a saving child, as this will trigger
-         * a copy on write madness. */
+        /* 更新老化算法的访问时间。
+         * 如果我们有一个正在save的子进程，
+         * 就不要这样做，因为这会触发COW。 */
         if (server.rdb_child_pid == -1 && server.aof_child_pid == -1)
-            val->lru = LRU_CLOCK();
+            val->lru = LRU_CLOCK();         // 更新访问时间，用于evict key
         return val;
     } else {
         return NULL;
@@ -60,8 +60,9 @@ robj *lookupKey(redisDb *db, robj *key) {
 robj *lookupKeyRead(redisDb *db, robj *key) {
     robj *val;
 
-    expireIfNeeded(db,key);
+    expireIfNeeded(db,key);     // 惰性删除
     val = lookupKey(db,key);
+    // 更新统计量
     if (val == NULL)
         server.stat_keyspace_misses++;
     else
@@ -130,10 +131,10 @@ int dbExists(redisDb *db, robj *key) {
     return dictFind(db->dict,key->ptr) != NULL;
 }
 
-/* Return a random key, in form of a Redis object.
- * If there are no keys, NULL is returned.
+/* 以Redis对象的形式返回一个随机键。
+ * 如果没有键，则返回NULL。
  *
- * The function makes sure to return keys not already expired. */
+ * 该函数确保返回尚未过期的key。 */
 robj *dbRandomKey(redisDb *db) {
     dictEntry *de;
 
@@ -653,7 +654,7 @@ void shutdownCommand(redisClient *c) {
      * Also when in Sentinel mode clear the SAVE flag and force NOSAVE. */
     if (server.loading || server.sentinel_mode)
         flags = (flags & ~REDIS_SHUTDOWN_SAVE) | REDIS_SHUTDOWN_NOSAVE;
-    if (prepareForShutdown(flags) == REDIS_OK) exit(0);
+    if (prepareForShutdown(flags) == REDIS_OK) exit(0);         // 服务器进程关闭
     addReplyError(c,"Errors trying to SHUTDOWN. Check logs.");
 }
 
@@ -823,10 +824,10 @@ int expireIfNeeded(redisDb *db, robj *key) {
     /* 加载时不要过期任何东西。稍后会完成。 */
     if (server.loading) return 0;
 
-    /* 如果我们在 Lua 脚本的上下文中，我们声称时间被阻塞到 Lua 脚本开始的时候。
+    /* 如果我们在Lua脚本的上下文中，我们声称时间被阻塞到Lua脚本开始的时候。
      * 这样，key只能在第一次访问时过期，而不是在脚本执行过程中过期，
      * 从而使传播到从属AOF保持一致。
-     * 有关更多信息，请参阅 Github 上的 issue 1525。 */
+     * 有关更多信息，请参阅Github上的issue 1525。 */
     now = server.lua_caller ? server.lua_time_start : mstime();
 
     /* 如果我们在从属上下文中运行，请尽快返回：从属key到期由主控控制，

@@ -157,6 +157,7 @@ int getGenericCommand(redisClient *c) {
     }
 }
 
+/* get命令 */
 void getCommand(redisClient *c) {
     getGenericCommand(c);
 }

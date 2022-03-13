@@ -409,10 +409,9 @@ void clusterInit(void) {
     server.cluster->stats_bus_messages_sent = 0;
     server.cluster->stats_bus_messages_received = 0;
     memset(server.cluster->slots,0, sizeof(server.cluster->slots));
-    clusterCloseAllSlots();
+    clusterCloseAllSlots();         // 清空相关数组
 
-    /* Lock the cluster config file to make sure every node uses
-     * its own nodes.conf. */
+    /* 锁定集群配置文件以确保每个节点都使用自己的nodes.conf。 */
     if (clusterLockConfig(server.cluster_configfile) == REDIS_ERR)
         exit(1);
 
@@ -429,12 +428,11 @@ void clusterInit(void) {
     }
     if (saveconf) clusterSaveConfigOrDie(1);
 
-    /* We need a listening TCP port for our cluster messaging needs. */
-    server.cfd_count = 0;
+    /* 我们需要一个侦听TCP端口来满足集群消息传递的需求. */
+    server.cfd_count = 0;           // server.cfd数组的实际大小
 
-    /* Port sanity check II
-     * The other handshake port check is triggered too late to stop
-     * us from trying to use a too-high cluster port number. */
+    /* 端口完整性检查 II
+     * 另一个握手端口检查触发得太晚，无法阻止我们尝试使用过高的集群端口号。 */
     if (server.port > (65535-REDIS_CLUSTER_PORT_INCR)) {
         redisLog(REDIS_WARNING, "Redis port number too high. "
                    "Cluster communication port is 10,000 port "
@@ -3370,8 +3368,8 @@ int clusterDelNodeSlots(clusterNode *node) {
     return deleted;
 }
 
-/* Clear the migrating / importing state for all the slots.
- * This is useful at initialization and when turning a master into slave. */
+/* 清除所有槽的migrating/importing状态。
+ * 这在初始化和将主机变为从机时很有用。 */
 void clusterCloseAllSlots(void) {
     memset(server.cluster->migrating_slots_to,0,
         sizeof(server.cluster->migrating_slots_to));
@@ -3798,6 +3796,7 @@ void clusterReplyMultiBulkSlots(redisClient *c) {
 }
 
 void clusterCommand(redisClient *c) {
+    // 必须要配置成集群模式，才能使用相关命令
     if (server.cluster_enabled == 0) {
         addReplyError(c,"This instance has cluster support disabled");
         return;
@@ -4712,16 +4711,15 @@ socket_rd_err:
  * Cluster functions related to serving / redirecting clients
  * -------------------------------------------------------------------------- */
 
-/* The ASKING command is required after a -ASK redirection.
- * The client should issue ASKING before to actually send the command to
- * the target instance. See the Redis Cluster specification for more
- * information. */
+/* ASK重定向后需要发送ASKING命令。
+ * 客户端应该在将命令实际发送到目标实例之前发出ASKING。
+ * 有关更多信息，请参阅Redis集群规范。 */
 void askingCommand(redisClient *c) {
     if (server.cluster_enabled == 0) {
         addReplyError(c,"This instance has cluster support disabled");
         return;
     }
-    c->flags |= REDIS_ASKING;
+    c->flags |= REDIS_ASKING;           // 带上此标记后可以破例执行查询
     addReply(c,shared.ok);
 }
 
@@ -4894,10 +4892,8 @@ clusterNode *getNodeByQuery(redisClient *c, struct redisCommand *cmd, robj **arg
         return server.cluster->migrating_slots_to[slot];
     }
 
-    /* If we are receiving the slot, and the client correctly flagged the
-     * request as "ASKING", we can serve the request. However if the request
-     * involves multiple keys and we don't have them all, the only option is
-     * to send a TRYAGAIN error. */
+    /* 如果我们正在接收槽，并且客户端正确地将请求标记为“ASKING”，我们可以为请求提供服务。
+     * 但是，如果请求涉及多个key并且我们没有全部，则唯一的选择是发送TRYAGAIN错误。 */
     if (importing_slot &&
         (c->flags & REDIS_ASKING || cmd->flags & REDIS_CMD_ASKING))
     {

@@ -82,7 +82,7 @@ list *listAddNodeHead(list *list, void *value)
     node->value = value;        // 用户数据
     if (list->len == 0) {
         list->head = list->tail = node;
-        node->prev = node->next = NULL;
+        node->prev = node->next = NULL;         // 双向不循环
     } else {
         node->prev = NULL;
         node->next = list->head;

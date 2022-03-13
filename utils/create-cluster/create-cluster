@@ -34,7 +34,7 @@ then
         PORT=$((PORT+1))
         HOSTS="$HOSTS 127.0.0.1:$PORT"
     done
-    ../../src/redis-trib.rb create --replicas $REPLICAS $HOSTS
+    ../../src/redis-trib.rb create --replicas $REPLICAS $HOSTS      # 实际使用ruby脚本创建集群
     exit 0
 fi
 

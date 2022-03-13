@@ -758,8 +758,8 @@ void updateSlavesWaitingBgsave(int bgsaveerr, int type) {
         } else if (slave->replstate == REDIS_REPL_WAIT_BGSAVE_END) {
             struct redis_stat buf;
 
-            /* If this was an RDB on disk save, we have to prepare to send
-             * the RDB from disk to the slave socket. Otherwise if this was
+            /* 如果这是磁盘保存的 RDB，我们必须准备将 RDB 从磁盘发送到从套接字。
+             * Otherwise if this was
              * already an RDB -> Slaves socket transfer, used in the case of
              * diskless replication, our work is trivial, we can just put
              * the slave online. */

@@ -78,7 +78,7 @@ aeEventLoop *aeCreateEventLoop(int setsize) {
     eventLoop->timeEventNextId = 0;
     eventLoop->stop = 0;
     eventLoop->maxfd = -1;
-    eventLoop->beforesleep = NULL;
+    eventLoop->beforesleep = NULL;          // 睡眠时的回调函数
 
     // 创建某种多路IO复用，aeApiCreate是封装后的同一接口
     if (aeApiCreate(eventLoop) == -1) goto err;

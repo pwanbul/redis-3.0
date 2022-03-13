@@ -272,43 +272,38 @@ void flushAppendOnlyFile(int force) {
     if (sdslen(server.aof_buf) == 0) return;            // aof_buf缓冲区为0
 
     if (server.aof_fsync == AOF_FSYNC_EVERYSEC)
-        sync_in_progress = bioPendingJobsOfType(REDIS_BIO_AOF_FSYNC) != 0;        // 队列中有未处理的任务
+        sync_in_progress = bioPendingJobsOfType(REDIS_BIO_AOF_FSYNC) != 0;        // 队列中有未处理的任务的数量
 
     if (server.aof_fsync == AOF_FSYNC_EVERYSEC && !force) {
-        /* With this append fsync policy we do background fsyncing.
-         * If the fsync is still in progress we can try to delay
-         * the write for a couple of seconds. */
+        /* 使用这个附加fsync策略，我们进行后台fsync。
+         * 如果fsync仍在进行中，我们可以尝试将写入延迟几秒钟。
+         * */
         if (sync_in_progress) {
             if (server.aof_flush_postponed_start == 0) {
-                /* No previous write postponing, remember that we are
-                 * postponing the flush and return. */
+                /* 没有之前的write推迟，记住我们推迟了flush和return。 */
                 server.aof_flush_postponed_start = server.unixtime;
                 return;
             } else if (server.unixtime - server.aof_flush_postponed_start < 2) {
-                /* We were already waiting for fsync to finish, but for less
-                 * than two seconds this is still ok. Postpone again. */
+                /* 我们已经在等待fsync完成了，
+                 * 但是不到两秒钟就可以了。再推迟。 */
                 return;
             }
-            /* Otherwise fall trough, and go write since we can't wait
-             * over two seconds. */
+            /* 否则就跌倒了，去写吧，因为我们不能等待超过两秒钟. */
             server.aof_delayed_fsync++;
             redisLog(REDIS_NOTICE,"Asynchronous AOF fsync is taking too long (disk is busy?). Writing the AOF buffer without waiting for fsync to complete, this may slow down Redis.");
         }
     }
-    /* We want to perform a single write. This should be guaranteed atomic
-     * at least if the filesystem we are writing is a real physical one.
-     * While this will save us against the server being killed I don't think
-     * there is much to do about the whole server stopping for power problems
-     * or alike */
+    /* 我们想要执行一次写入。至少如果我们正在编写的文件系统是一个真正的物理文件系统，
+     * 这应该保证是原子的。虽然这将使我们免于服务器被杀死，
+     * 但我认为整个服务器因电源问题或类似问题而停止并没有什么可做的 */
 
     latencyStartMonitor(latency);
+    // server.aof_buf写入内核缓冲区
     nwritten = write(server.aof_fd,server.aof_buf,sdslen(server.aof_buf));
     latencyEndMonitor(latency);
-    /* We want to capture different events for delayed writes:
-     * when the delay happens with a pending fsync, or with a saving child
-     * active, and when the above two conditions are missing.
-     * We also use an additional event name to save all samples which is
-     * useful for graphing / monitoring purposes. */
+    /* 我们想为延迟写入捕获不同的事件：
+     * 当延迟发生在挂起的fsync或正在保存的子节点处于活动状态时，以及上述两个条件缺失时。
+     * 我们还使用一个额外的事件名称来保存所有样本，这对于图形监控目的很有用。 */
     if (sync_in_progress) {
         latencyAddSampleIfNeeded("aof-write-pending-fsync",latency);
     } else if (server.aof_child_pid != -1 || server.rdb_child_pid != -1) {
@@ -318,14 +313,14 @@ void flushAppendOnlyFile(int force) {
     }
     latencyAddSampleIfNeeded("aof-write",latency);
 
-    /* We performed the write so reset the postponed flush sentinel to zero. */
+    /* 我们执行了写入，因此将推迟的刷新标记重置为零。 */
     server.aof_flush_postponed_start = 0;
 
     if (nwritten != (signed)sdslen(server.aof_buf)) {
         static time_t last_write_error_log = 0;
         int can_log = 0;
 
-        /* Limit logging rate to 1 line per AOF_WRITE_LOG_ERROR_RATE seconds. */
+        /* 将记录速率限制为每AOF_WRITE_LOG_ERROR_RATE秒1行。 */
         if ((server.unixtime - last_write_error_log) > AOF_WRITE_LOG_ERROR_RATE) {
             can_log = 1;
             last_write_error_log = server.unixtime;
@@ -385,8 +380,7 @@ void flushAppendOnlyFile(int force) {
             return; /* We'll try again on the next call... */
         }
     } else {
-        /* Successful write(2). If AOF was in error state, restore the
-         * OK state and log the event. */
+        /* 成功write（2）。如果AOF处于错误状态，则恢复OK状态并记录事件。 */
         if (server.aof_last_write_status == REDIS_ERR) {
             redisLog(REDIS_WARNING,
                 "AOF write error looks solved, Redis can write again.");
@@ -395,8 +389,7 @@ void flushAppendOnlyFile(int force) {
     }
     server.aof_current_size += nwritten;
 
-    /* Re-use AOF buffer when it is small enough. The maximum comes from the
-     * arena size of 4k minus some overhead (but is otherwise arbitrary). */
+    /* 当缓冲区足够小时重新使用它。最大值来自 4k 的竞技场大小减去一些开销（但在其他方面是任意的）。 */
     if ((sdslen(server.aof_buf)+sdsavail(server.aof_buf)) < 4000) {
         sdsclear(server.aof_buf);
     } else {
@@ -404,8 +397,8 @@ void flushAppendOnlyFile(int force) {
         server.aof_buf = sdsempty();
     }
 
-    /* Don't fsync if no-appendfsync-on-rewrite is set to yes and there are
-     * children doing I/O in the background. */
+    /* 如果no-appendfsync-on-rewrite设置为yes并且有孩子在后台进行IO，
+     * 则不要fsync。 */
     if (server.aof_no_fsync_on_rewrite &&
         (server.aof_child_pid != -1 || server.rdb_child_pid != -1))
             return;

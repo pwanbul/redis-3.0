@@ -1008,10 +1008,8 @@ void evalGenericCommand(redisClient *c, int evalsha) {
     /* Select the right DB in the context of the Lua client */
     selectDb(server.lua_client,c->db->id);
 
-    /* Set a hook in order to be able to stop the script execution if it
-     * is running for too much time.
-     * We set the hook only if the time limit is enabled as the hook will
-     * make the Lua script execution slower. */
+    /* 设置一个挂钩，以便在脚本运行时间过长时能够停止脚本执行。
+     * 我们仅在启用时间限制时设置挂钩，因为挂钩会使Lua脚本执行速度变慢。 */
     server.lua_caller = c;
     server.lua_time_start = mstime();
     server.lua_kill = 0;

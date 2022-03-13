@@ -251,10 +251,10 @@ void unwatchAllKeys(redisClient *c) {
         clients = dictFetchValue(wk->db->watched_keys, wk->key);
         redisAssertWithInfo(c,NULL,clients != NULL);
         listDelNode(clients,listSearchKey(clients,c));
-        /* Kill the entry at all if this was the only client */
+        /* 如果这是唯一的客户端，则完全终止该条目 */
         if (listLength(clients) == 0)
             dictDelete(wk->db->watched_keys, wk->key);
-        /* Remove this watched key from the client->watched list */
+        /* 从client->watch列表中删除此监视键 */
         listDelNode(c->watched_keys,ln);
         decrRefCount(wk->key);
         zfree(wk);
