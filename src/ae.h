@@ -68,9 +68,9 @@ typedef struct aeFileEvent {
 
 /* 时间事件结构 */
 typedef struct aeTimeEvent {
-    long long id; /* time event identifier. */
-    long when_sec; /* seconds */
-    long when_ms; /* milliseconds */
+    long long id; /* 时间事件标识符。 */
+    long when_sec; /* 秒 */
+    long when_ms; /* 上一秒到现在的毫秒时间 */
     aeTimeProc *timeProc;       // 超时处理函数
     aeEventFinalizerProc *finalizerProc;
     void *clientData;
@@ -93,7 +93,7 @@ typedef struct aeEventLoop {
     aeFiredEvent *fired; /* 触发事件 */
     aeTimeEvent *timeEventHead;         // 定时器链表头
     int stop;
-    void *apidata; /* This is used for polling API specific data */
+    void *apidata; /* 这用于轮询API特定数据 */
     aeBeforeSleepProc *beforesleep;
 } aeEventLoop;
 

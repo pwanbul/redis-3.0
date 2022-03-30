@@ -286,9 +286,8 @@ static int processTimeEvents(aeEventLoop *eventLoop) {
     long long maxId;
     time_t now = time(NULL);
 
-    /* If the system clock is moved to the future, and then set back to the
-     * right value, time events may be delayed in a random way. Often this
-     * means that scheduled operations will not be performed soon enough.
+    /* 如果系统时钟移动到未来，然后设置回正确的值，时间事件可能会以随机方式延迟。
+     * 这通常意味着计划的操作不会很快执行。
      *
      * Here we try to detect system clock skews, and force all the time
      * events to be processed ASAP when this happens: the idea is that
@@ -418,9 +417,9 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
             int fd = eventLoop->fired[j].fd;
             int rfired = 0;
 
-	    /* note the fe->mask & mask & ... code: maybe an already processed
-             * event removed an element that fired and we still didn't
-             * processed, so we check if the event is still valid. */
+	    /* 注意fe->mask&mask&...代码：
+	     * 也许一个已经处理的事件删除了一个触发的元素，
+	     * 我们仍然没有处理，所以我们检查事件是否仍然有效。 */
             if (fe->mask & mask & AE_READABLE) {
                 rfired = 1;
                 fe->rfileProc(eventLoop,fd,fe->clientData,mask);
