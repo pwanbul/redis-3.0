@@ -91,7 +91,7 @@ void zlibc_free(void *ptr) {
 // 更新used_memory统计量
 #define update_zmalloc_stat_alloc(__n) do { \
     size_t _n = (__n);                      \
-    /*对齐大小*/                             \
+    /* 对齐大小 n必须是sizeof(long)的整数倍 */      \
     if (_n&(sizeof(long)-1)) _n += sizeof(long)-(_n&(sizeof(long)-1)); \
     if (zmalloc_thread_safe) { \
         update_zmalloc_stat_add(_n); \

@@ -85,10 +85,10 @@ typedef struct aeFiredEvent {
 
 /* 基于事件的程序的状态 */
 typedef struct aeEventLoop {
-    int maxfd;   /* highest file descriptor currently registered */
-    int setsize; /* max number of file descriptors tracked */
+    int maxfd;   /* 当前注册的最高文件描述符 */
+    int setsize; /* 跟踪的最大文件描述符数 */
     long long timeEventNextId;      // 定时器没有fd，所以用自增的ID
-    time_t lastTime;     /* Used to detect system clock skew */
+    time_t lastTime;     /* 用于检测系统时钟偏差 */
     aeFileEvent *events; /* 注册事件 */
     aeFiredEvent *fired; /* 触发事件 */
     aeTimeEvent *timeEventHead;         // 定时器链表头
@@ -97,7 +97,7 @@ typedef struct aeEventLoop {
     aeBeforeSleepProc *beforesleep;
 } aeEventLoop;
 
-/* Prototypes */
+/* 原型 */
 aeEventLoop *aeCreateEventLoop(int setsize);
 void aeDeleteEventLoop(aeEventLoop *eventLoop);
 void aeStop(aeEventLoop *eventLoop);

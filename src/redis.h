@@ -460,7 +460,7 @@ typedef struct redisDb {
     dict *watched_keys;         /* MULTI/EXEC CAS的WATCHED键，值是一个链表，里面保存watch该keyd的客户端 */
     struct evictionPoolEntry *eviction_pool;    /* 驱逐key池 */
     int id;                     /* 数据库标识 */
-    long long avg_ttl;          /* Average TTL 定期删除key时，随机到未过期的key时更新该值 */
+    long long avg_ttl;          /* 数据库对象的平均ttl */
 } redisDb;
 
 /* 事务队列中的事务 */

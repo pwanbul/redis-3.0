@@ -3345,6 +3345,7 @@ void createPidFile(void) {
     }
 }
 
+// 设置为daemon
 void daemonize(void) {
     int fd;
 

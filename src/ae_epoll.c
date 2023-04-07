@@ -32,10 +32,9 @@
 #include <sys/epoll.h>
 
 // 基于epoll
-
 typedef struct aeApiState {
-    int epfd;
-    struct epoll_event *events;     // epoll_wait中使用
+    int epfd;           // epoll_create返回的文件描述符
+    struct epoll_event *events;     // epoll_wait返回的事件
 } aeApiState;
 
 // 创建apiState

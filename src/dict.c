@@ -76,8 +76,10 @@ unsigned int dictIntHashFunction(unsigned int key)
     return key;
 }
 
+// 默认的hash函数种子
 static uint32_t dict_hash_function_seed = 5381;
 
+// 设置dict中hash函数的种子
 void dictSetHashFunctionSeed(uint32_t seed) {
     dict_hash_function_seed = seed;
 }

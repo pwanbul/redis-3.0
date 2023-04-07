@@ -144,9 +144,9 @@ static int spt_copyargs(int argc, char *argv[]) {
 	return 0;
 } /* spt_copyargs() */
 
-
+/* 设置进程名称 */
 void spt_init(int argc, char *argv[]) {
-        char **envp = environ;
+	char **envp = environ;
 	char *base, *end, *nul, *tmp;
 	int i, error;
 
